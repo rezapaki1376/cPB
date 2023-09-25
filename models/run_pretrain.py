@@ -14,12 +14,7 @@ from models.utils import (
 )
 import torch.utils.data as data_utils
 from torch.utils.data import DataLoader
-from models.clstm import (
-    cLSTMLinear,
-)
-from models.cgru import (
-    cGRULinear,
-)
+from models.pretrain import *
 
 class cPNN:
     """
@@ -28,7 +23,7 @@ class cPNN:
 
     def __init__(
         self,
-        column_class=cLSTMLinear,
+        column_class=PretrainModel,
         device=None,
         lr: float = 0.01,
         seq_len: int = 5,
@@ -207,59 +202,6 @@ class cPNN:
         y = torch.tensor(y)
         return x, y, y_seq
 
-    def add_new_column(self):
-        """
-        It adds a new column to the cPNN architecture, after a concept drift.
-        """
-        self.reset_previous_data_points()
-        self.columns.add_new_column()
-
-    def learn_one(self, x:np.array, y: np.array, previous_data_points: np.array = None):
-        """
-        It trains cPNN on a single data point.
-        Before performing the training, if concept_boundaries was provided during the constructor method, it
-        automatically adds a new column after concept drift.
-        *ONLY FOR ANYTIME LEARNER*
-
-        Parameters
-        ----------
-        x: numpy.array or list
-            The features values of the single data point.
-        y: numpy.array or list
-            The target value of the single data point.
-        previous_data_points: numpy.array, default: None.
-            The features value of the data points preceding x in the sequence.
-            If None, it uses the last seq_len-1 points seen during the last calls of the method.
-            It returns None if the model has not seen yet seq_len-1 data points and previous_data_points is None.
-        """
-        if not self.anytime_learner:
-            warnings.warn(
-                "The model is a batch learner, it cannot learn from a single data point.\n" +
-                "Call learn_many on a batch containing a single sequence"
-            )
-            return None
-        if self.concept_boundaries is not None and len(self.concept_boundaries) > 0:
-            if self.samples_cont >= self.concept_boundaries[0]:
-                print("New column added")
-                self.add_new_column()
-                self.concept_boundaries = self.concept_boundaries[1:]
-
-        x = np.array(x).reshape(1, -1)
-        y = np.array(y).reshape(1, -1)
-        if previous_data_points is not None:
-            self.previous_data_points_anytime_train = previous_data_points
-        if self.previous_data_points_anytime_train is None:
-            self.previous_data_points_anytime_train = x
-            return None
-        if len(self.previous_data_points_anytime_train) != self.seq_len - 1:
-            self.previous_data_points_anytime_train = np.concatenate(
-                [self.previous_data_points_anytime_train, x])
-            return None
-        self.previous_data_points_anytime_train = np.concatenate([self.previous_data_points_anytime_train, x])
-        x, y, _ = self._load_batch(self.previous_data_points_anytime_train, y)
-        self._fit(x, y.view(-1))
-        self.previous_data_points_anytime_train = self.previous_data_points_anytime_train[1:]
-
     def learn_many(self, x: np.array, y: np.array) -> dict:
         """
         It trains cPNN on a single batch.
@@ -337,165 +279,8 @@ class cPNN:
 
         return perf_train
 
-    def predict_many(self, x: np.array, column_id: int = None):
-        """
-        It performs prediction on a single batch. It uses the last column of cPNN architecture.
-
-        Parameters
-        ----------
-        x: numpy.array or list
-            The features values of the batch.
-        column_id: int, default: None.
-            The id of the column to use. If None the last column is used.
-
-        Returns
-        -------
-        predictions: numpy.array
-            The 1D numpy array (with length batch_size) containing predictions of all samples.
-        """
-        if self.anytime_learner:
-            if self.anytime_learner:
-                warnings.warn(
-                    "The model is an anytime learner, it cannot predict a batch of data.\n" +
-                    "Loop on predict_one method to predict on multiple data points"
-                )
-                return None
-        x = np.array(x)
-        if x.shape[0] < self.get_seq_len():
-            return np.array([None] * x.shape[0])
-        first_train = False
-        if self.loss_on_seq:
-            if self.previous_data_points_batch_train is not None:
-                x = np.concatenate([x, self.previous_data_points_batch_train], axis=0)
-                self.previous_data_points_batch_train = x[-(self.seq_len-1):]
-            else:
-                first_train = True
-        x = self._convert_to_tensor_dataset(x).to(self.columns.device)
-        with torch.no_grad():
-            outputs = self.columns(x, column_id)
-            if not self.loss_on_seq:
-                outputs = get_samples_outputs(outputs)
-            pred, _ = get_pred_from_outputs(outputs)
-            pred = pred.detach().cpu().numpy()
-            if first_train:
-                return np.concatenate([np.array([None for _ in range(self.seq_len-1)]), pred], axis=0)
-            return pred
-
-    def predict_one (self, x : np.array, column_id: int = None, previous_data_points: np.array = None):
-        """
-        It performs prediction on a single data point using the last column of cPNN architecture.
-
-        Parameters
-        ----------
-        x: numpy.array or list
-            The features values of the single data point.
-        column_id: int, default: None.
-            The id of the column to use. If None the last column is used.
-        previous_data_points: numpy.array, default: None.
-            The features value of the data points preceding x in the sequence.
-            If None, it uses the last seq_len-1 points seen during the last calls of the method.
-            It returns None if the model has not seen yet seq_len-1 data points and previous_data_points is None.
-        Returns
-        -------
-        prediction : int
-            The predicted int label of x.
-        """
-        x = np.array(x).reshape(1, -1)
-        if previous_data_points is not None:
-            self.previous_data_points_anytime_inference = previous_data_points
-        if self.previous_data_points_anytime_inference is None:
-            self.previous_data_points_anytime_inference = x
-            return None
-        if len(self.previous_data_points_anytime_inference) != self.seq_len - 1:
-            self.previous_data_points_anytime_inference = np.concatenate([self.previous_data_points_anytime_inference, x])
-            return None
-        self.previous_data_points_anytime_inference = np.concatenate([self.previous_data_points_anytime_inference, x])
-        x = self._convert_to_tensor_dataset(self.previous_data_points_anytime_inference).to(self.columns.device)
-        self.previous_data_points_anytime_inference = self.previous_data_points_anytime_inference[1:]
-        with torch.no_grad():
-            if not self.loss_on_seq:
-                pred, _ = get_pred_from_outputs(self.columns(x, column_id)[0])
-            else:
-                pred, _ = get_pred_from_outputs(self.columns(x, column_id))
-            return int(pred[-1].detach().cpu().numpy())
-
     def get_n_columns(self):
         return len(self.columns.columns)
-
-    def reset_previous_data_points(self):
-        self.previous_data_points_batch_train = None
-        self.previous_data_points_anytime_train = None
-        self.previous_data_points_anytime_inference = None
-
-    def test_many_anytime(self, x: np.array, y: np.array, column_id: int = None) -> dict:
-        """
-        It tests cPNN on a single batch, by computing the metrics after averaging each data point's predictions.
-        Each prediction is made on the single data point individually.
-
-        Parameters
-        ----------
-        x: numpy.array
-            The features values of batch.
-        y: numpy.array
-            The real int label of the batch.
-        column_id: int, default: None.
-            The id of the column to use. If None the last column is used.
-
-        Returns
-        -------
-        perf: dict
-            A dictionary containing the evaluated metrics.
-        """
-        y_pred = [self.predict_one(x_, column_id=column_id) for x_ in x]
-        y = np.array([y[i] for i in range(len(y_pred)) if y_pred[i] is not None])
-        y_pred = np.array([y_ for y_ in y_pred if y_ is not None])
-        if len(y_pred) == 0:
-            return {k: None for k in ["accuracy", "kappa", "kappa_temporal"]}
-        return {
-            "accuracy" : accuracy_score(y, y_pred),
-            "kappa" : cohen_kappa_score(y, y_pred),
-            "kappa_temporal" : kappa_temporal_score(y, y_pred, self.first_label_kappa)
-        }
-
-    def test_many(self, x: np.array, y: np.array, column_id: int = None) -> dict:
-        """
-        It tests cPNN on a single batch, by computing the metrics after averaging each data point's predictions.
-        *ONLY FOR BATCH LEARNER*
-
-        Parameters
-        ----------
-        x: numpy.array
-            The features values of the batch.
-        y: numpy.array
-            The target values of the batch.
-        column_id: int, default: None.
-            The id of the column to use. If None the last column is used.
-
-        Returns
-        -------
-        perf_test: dict
-            The dictionary representing test's performance.
-            The following metrics are computed: accuracy, kappa, kappa_temporal.
-        """
-        if self.anytime_learner:
-            warnings.warn(
-                "The model is an anytime learner, it cannot learn from batch.\n" +
-                "You cannot call this method"
-            )
-            return {}
-        if x.shape[0] < self.seq_len:
-            return {k: None for k in ["accuracy", "kappa", "kappa_temporal"]}
-
-        y_pred = self.predict_many(x, column_id)
-        perf = {
-            "accuracy": accuracy_score(y, y_pred),
-            "kappa": cohen_kappa_score(y, y_pred),
-            "kappa_temporal": kappa_temporal_score(y, y_pred, self.first_label_kappa)
-        }
-
-        if self.train_verbose:
-            print(f"Test accuracy: {perf['accuracy']}")
-        return perf
 
     def test_then_train(
         self,
@@ -536,70 +321,9 @@ class cPNN:
                 "You cannot call this method"
             )
             return ()
-        perf_test_single_pred = self.test_many_anytime(x, y)
-        perf_test = self.test_many(x, y, column_id)
+
         perf_train = self.learn_many(x, y)
         self.first_label_kappa = torch.tensor(y[-1]).view(1)
-        return perf_test, perf_test_single_pred, perf_train
-
-    def pretraining(
-        self, x: np.array, y: list, epochs: int = 100, batch_size: int = 128
-    ) -> dict:
-        """
-        It performs the pretraining on a pretraining set.
-        *ONLY FOR BATCH LEARNER*
-
-        Parameters
-        ----------
-        x: numpy.array
-            The features values of the set.
-        y: list
-            The target values of the set.
-        epochs: int, default: 100.
-            The number of training epochs to perform on the set.
-        batch_size: int, default: 128.
-            The training batch size.
-
-        Returns
-        -------
-        perf_train: dict
-            The dictionary representing training's performance.
-            The following metrics are computed: accuracy, loss, kappa, kappa_temporal.
-            For each metric the dict contains a list of shape (epochs, n_batches) where n_batches is the training
-            batches number.
-        """
-        if self.anytime_learner:
-            warnings.warn(
-                "The model is an anytime learner, it cannot learn from batch.\n" +
-                "You cannot call this method"
-            )
-            return {}
-
-        perf_train = {
-            "accuracy": [],
-            "loss": [],
-            "kappa": [],
-            "kappa_temporal": [],
-        }
-
-        x = torch.tensor(x)
-        y = torch.tensor(y).type(torch.LongTensor)
-        data = data_utils.TensorDataset(x, y)
-        loader = DataLoader(data, batch_size=batch_size, drop_last=False)
-        print("Pretraining")
-        for e in range(1, epochs + 1):
-            for k in perf_train:
-                perf_train[k].append([])
-            for id_batch, (x, y) in enumerate(loader):
-                print(
-                    f"{id_batch+1}/{len(loader)} batch of {e}/{epochs} epoch", end="\r"
-                )
-                x, y_seq = self._cut_in_sequences_tensors(x, y)
-                perf_batch = self._fit(x, y)
-                for k in perf_batch:
-                    perf_train[k][-1].append(perf_batch[k])
-        print()
-        print()
         return perf_train
 
     def _fit(self, x, y):
