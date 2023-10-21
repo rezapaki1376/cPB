@@ -36,11 +36,8 @@ class PretrainModel(nn.Module):
         self.linear = nn.Linear(hidden_size, output_size)
         self.linear.to(self.device)
 
-    def forward(self, x, prev_h, train=False):
+    def forward(self, x, train=False):
         input_f = x.to(self.device)
-
-        if prev_h is not None:
-            input_f = torch.cat((x, prev_h), dim=2)  # (B, L, I+H)
 
         out_h, _ = self.gru(input_f,self._build_initial_state(x, self.h0))
         if self.many_to_one:
@@ -50,7 +47,7 @@ class PretrainModel(nn.Module):
 
         if train and self.remember_states:
             self.h0 = out_h[:, 1, :].detach().numpy()
-        return out, out_h
+        return out
 
     def _build_initial_state(self, x, state):
         s = torch.from_numpy(np.tile(state, (1, x.size()[0], 1))).float()

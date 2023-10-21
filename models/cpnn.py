@@ -30,7 +30,7 @@ class cPNN:
         self,
         column_class=cGRULinear,
         device=None,
-        lr: float = 0.001,
+        lr: float = 0.01,
         seq_len: int = 5,
         stride: int = 1,
         first_label_kappa: int = None,
