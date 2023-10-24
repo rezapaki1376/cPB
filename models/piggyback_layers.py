@@ -33,13 +33,13 @@ class Ternarizer(torch.autograd.Function):
 
     def __init__(self, threshold=DEFAULT_THRESHOLD):
         super(Ternarizer, self).__init__()
-        self.threshold = threshold
+        Ternarizer.threshold = threshold
 
     def forward(self, inputs):
         outputs = inputs.clone()
         outputs.fill_(0)
         outputs[inputs < 0] = -1
-        outputs[inputs > self.threshold] = 1
+        outputs[inputs > Ternarizer.threshold] = 1
         return outputs
 
     def backward(self, gradOutput):
