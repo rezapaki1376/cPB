@@ -63,6 +63,7 @@ class LSTM_Model(nn.Module):
     def __init__(
         self,
         input_size=2,
+      	num_layers=1,
         device=torch.device("cpu"),
         hidden_size=50,
         output_size=2,
@@ -78,6 +79,7 @@ class LSTM_Model(nn.Module):
         self.output_size = output_size
         self.batch_size = batch_size
         self.device = torch.device(device)
+        self.num_layers = num_layers
         self.h0 = np.zeros((1, self.hidden_size))
         self.c0 = np.zeros((1, self.hidden_size))
         self.many_to_one = many_to_one
@@ -104,7 +106,7 @@ class LSTM_Model(nn.Module):
         else:
             out = self.linear(out_h)
 
-        return out, out_h
+        return out
 
     def _build_initial_state(self, x, state):
         s = torch.from_numpy(np.tile(state, (1, x.size()[0], 1))).float()
