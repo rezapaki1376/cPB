@@ -15,10 +15,13 @@ from models.utils import (
 import torch.utils.data as data_utils
 from torch.utils.data import DataLoader
 import copy
-from models.PiggyBackGRU import(
+from models.PiggyBack import(
 	PiggyBackGRU,
+  	PiggyBackLSTM,
 )
-from models.network import ModifiedGRU
+
+from models.network import ModifiedRNN
+
 import matplotlib.pyplot as plt
 class cPB:
     """
@@ -27,11 +30,13 @@ class cPB:
 
     def __init__(
         self,
+        # this parameter is useless and i should remove it
         model_class=PiggyBackGRU,
         device=None,
         stride: int = 1,
         lr: float = 0.01,
         seq_len: int = 5,
+        base_model='gru',
         pretrain_model_addr='',
         mask_weights=[],
         mask_init='1s',
@@ -44,6 +49,7 @@ class cPB:
       self.stride=stride
       self.seq_len=seq_len
       self.lr=lr
+      self.base_model=base_model
       self.pretrain_model_addr=pretrain_model_addr
       self.mask_init=mask_init
       self.weights_list=[]
@@ -55,7 +61,7 @@ class cPB:
       self.cohen_kappa_saving=[[]]
 
       if model_class==PiggyBackGRU and pretrain_model_addr!='':
-        self.model = ModifiedGRU(pretrain_model_addr=pretrain_model_addr,seq_len=seq_len,mask_weights=mask_weights,mask_init=mask_init)
+        self.model = ModifiedRNN(pretrain_model_addr=pretrain_model_addr,base_model=base_model,seq_len=seq_len,mask_weights=mask_weights,mask_init=mask_init)
         self.initial_weights = self.model.state_dict()
 
       self.final_weights=[]
@@ -119,6 +125,7 @@ class cPB:
 
       optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
       x, y, _ = self._load_batch(x, y)
+      #print('inside the train and fit', x.shape)
       for i in range(0,self.epoch_size):
         y_pred = self.model(x)
         y_pred = get_samples_outputs(y_pred)
@@ -147,8 +154,8 @@ class cPB:
       mask_weights.append(self.weights_list[task_number][param_list[-3]])
       mask_weights.append(self.weights_list[task_number][param_list[-2]])
       mask_weights.append(self.weights_list[task_number][param_list[-1]])
-      self.model=ModifiedGRU(pretrain_model_addr=self.pretrain_model_addr,
-                             seq_len=self.seq_len,mask_weights=mask_weights,
+      self.model=ModifiedRNN(pretrain_model_addr=self.pretrain_model_addr,
+                             base_model=self.base_model,seq_len=self.seq_len,mask_weights=mask_weights,
                              mask_init=self.mask_init)
       return self.model
 
@@ -159,6 +166,7 @@ class cPB:
       x = np.array(x)
       y = list(y)
       x, y, _ = self._load_batch(x, y)
+      #print('input shape', x.shape)
       y_pred = self.model(x)
       y_pred = get_samples_outputs(y_pred)
       pred, _ = get_pred_from_outputs(y_pred)

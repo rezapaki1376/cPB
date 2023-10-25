@@ -54,10 +54,6 @@ class GRU_Model(nn.Module):
         s.requires_grad = True
         return s.to(self.device)
 
-import torch
-from torch import nn
-import numpy as np
-
 
 class LSTM_Model(nn.Module):
     def __init__(
