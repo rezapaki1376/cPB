@@ -41,6 +41,7 @@ class cPB:
         mask_weights=[],
         mask_init='1s',
         number_of_tasks=4,
+      	threshold_fn='binarizer',
         epoch_size=5,
         **kwargs,
     ):
@@ -50,6 +51,7 @@ class cPB:
       self.seq_len=seq_len
       self.lr=lr
       self.base_model=base_model
+      self.threshold_fn=threshold_fn
       self.pretrain_model_addr=pretrain_model_addr
       self.mask_init=mask_init
       self.weights_list=[]
@@ -61,7 +63,7 @@ class cPB:
       self.cohen_kappa_saving=[[]]
 
       if model_class==PiggyBackGRU and pretrain_model_addr!='':
-        self.model = ModifiedRNN(pretrain_model_addr=pretrain_model_addr,base_model=base_model,seq_len=seq_len,mask_weights=mask_weights,mask_init=mask_init)
+        self.model = ModifiedRNN(pretrain_model_addr=pretrain_model_addr,threshold_fn=threshold_fn,base_model=base_model,seq_len=seq_len,mask_weights=mask_weights,mask_init=mask_init)
         self.initial_weights = self.model.state_dict()
 
       self.final_weights=[]
@@ -154,7 +156,7 @@ class cPB:
       mask_weights.append(self.weights_list[task_number][param_list[-3]])
       mask_weights.append(self.weights_list[task_number][param_list[-2]])
       mask_weights.append(self.weights_list[task_number][param_list[-1]])
-      self.model=ModifiedRNN(pretrain_model_addr=self.pretrain_model_addr,
+      self.model=ModifiedRNN(pretrain_model_addr=self.pretrain_model_addr,threshold_fn=self.threshold_fn,
                              base_model=self.base_model,seq_len=self.seq_len,mask_weights=mask_weights,
                              mask_init=self.mask_init)
       return self.model
