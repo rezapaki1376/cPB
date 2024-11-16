@@ -49,9 +49,9 @@ These boundaries yield four classification functions:
 In the SINE RW Mode, temporal dependency is introduced into the labels. Each label \(y'_t\) is determined based on the most frequent label from the last four time steps:
 
 
-$$
-y'_t = MODE(y_{t-1}, y_{t-2}, y_{t-3}, y_{t-4})
-$$
+
+$$y'_t  = $$ MODE $$ (y_{t-1}, y_{t-2}, y_{t-3}, y_{t-4}) $$
+
 
 
 ### Concept Drift
