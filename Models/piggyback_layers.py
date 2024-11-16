@@ -1,4 +1,3 @@
-# this file is for defining the piggyback layers with mask
 import torch
 import numpy as np
 from sklearn.metrics import accuracy_score, cohen_kappa_score
@@ -8,7 +7,6 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 from torch.nn.modules.utils import _pair
 from torch.nn.parameter import Parameter
-# importing gru math computation block
 from torch._VF import gru as _VF_gru
 from torch._VF import lstm as _VF_lstm
 
@@ -186,7 +184,7 @@ class ElementWiseLSTM(nn.Module):
             if self.mask_init == 'uniform':
                 self.mask_real_weight_ih.uniform_(-1 * self.mask_scale, self.mask_scale)
                 self.mask_real_weight_hh.uniform_(-1 * self.mask_scale, self.mask_scale)
-            elif self.mask_init == '1s'
+            elif self.mask_init == '1s':
                 self.mask_real_weight_ih.fill_(self.mask_scale)
                 self.mask_real_weight_hh.fill_(self.mask_scale)
 
