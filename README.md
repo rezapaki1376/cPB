@@ -67,7 +67,7 @@ This dataset, provided by the Agricultural Research Service of the U.S. Departme
 
 ### Features
 The dataset includes the following features:
-- Air temperature $$(T_a)$$in °C.
+- Air temperature $$(T_a)$$ in °C.
 - Relative humidity $$(RH)$$ in percentage.
 - Wind speed $$(w_s)$$ in m/s.
 - Wind direction $$(w_d)$$ in degrees (0°–360°).
@@ -134,7 +134,7 @@ W3-: y(X_t) =
 \end{cases}
 $$
 
-The functions $$W1+$$ and $$W1-$$ reflect immediate changes, capturing short-term temporal dynamics by comparing the current $$T_a$$ value against its immediate predecessor. In contrast, $$W_{2+}$$, $$W2-$$, $$W3+$$, and $$W3-$$ capture more extended temporal dependencies by considering the median or minimum of $$T_a$$ over the last ten time steps.
+The functions $$W1+$$ and $$W1-$$ reflect immediate changes, capturing short-term temporal dynamics by comparing the current $$T_a$$ value against its immediate predecessor. In contrast, $$W2+$$, $$W2-$$, $$W3+$$, and $$W3-$$ capture more extended temporal dependencies by considering the median or minimum of $$T_a$$ over the last ten time steps.
 
 ---
 
