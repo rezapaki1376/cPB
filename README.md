@@ -42,8 +42,8 @@ S_2: x_1 - 0.5 - 0.3 \sin(3 \pi x_2) = 0
 $$
 
 These boundaries yield four classification functions:
-- \(S_{1+}\) and \(S_{2+}\): Assign a label "1" to points above the curve and "0" otherwise.
-- \(S_{1-}\) and \(S_{2-}\): Invert the labels of \(S_{1+}\) and \(S_{2+}\).
+- $$S_{1+}$$ and $$S_{2+}$$: Assign a label "1" to points above the curve and "0" otherwise.
+- $$S_{1-}$$ and $$S_{2-}$$: Invert the labels of $$S_{1+}v and $$S_{2+}$$.
 
 ### Temporal Label Dependency
 In the SINE RW Mode, temporal dependency is introduced into the labels. Each label \(y'_t\) is determined based on the most frequent label from the last four time steps:
