@@ -59,6 +59,19 @@ The data stream transitions between boundary functions ($$S_1$$ and $$S_2$$) to 
 - Mild drift: $$S_{1+} \to S_{2+}$$
 - Severe drift: $$S_{2+} \to S_{1-}$$
 
+
+Testing Datasets:
+* **sine_rw10_mode5_extended_16-16_1234**: S1+, S2+, S1-, S2-.
+* **sine_rw10_mode5_extended_16-16_1432**: S1+, S2-, S1-, S2+.
+* **sine_rw10_mode5_extended_16-16_2143**: S2+, S1+, S2-, S1-.
+* **sine_rw10_mode5_extended_16-16_2341**: S2+, S1-, S2-, S1+.
+
+pretraining used Datasets:
+* **sine_rw10_mode5_extended_6-6_1234**: S1+, S2+, S1-, S2-.
+* **sine_rw10_mode5_extended_6-6_1432**: S1+, S2-, S1-, S2+.
+* **sine_rw10_mode5_extended_6-6_2143**: S2+, S1+, S2-, S1-.
+* **sine_rw10_mode5_extended_6-6_2341**: S2+, S1-, S2-, S1+.
+  
 ---
 
 ## Weather Data Stream
@@ -138,25 +151,6 @@ The functions $$W1+$$ and $$W1-$$ reflect immediate changes, capturing short-ter
 
 ---
 
-These datasets provide a robust framework for evaluating and improving machine learning algorithms under dynamic and temporally dependent conditions.
-
-# SINE
-It contains the generated data streams.
-
-Testing Datasets:
-* **sine_rw10_mode5_extended_16-16_1234**: S1+, S2+, S1-, S2-.
-* **sine_rw10_mode5_extended_16-16_1432**: S1+, S2-, S1-, S2+.
-* **sine_rw10_mode5_extended_16-16_2143**: S2+, S1+, S2-, S1-.
-* **sine_rw10_mode5_extended_16-16_2341**: S2+, S1-, S2-, S1+.
-
-pretraining used Datasets:
-* **sine_rw10_mode5_extended_6-6_1234**: S1+, S2+, S1-, S2-.
-* **sine_rw10_mode5_extended_6-6_1432**: S1+, S2-, S1-, S2+.
-* **sine_rw10_mode5_extended_6-6_2143**: S2+, S1+, S2-, S1-.
-* **sine_rw10_mode5_extended_6-6_2341**: S2+, S1-, S2-, S1+.
-
-# Weather
-
 Testing Datasets:
 * **weather_st124_1conf**: W1+, W2+, W1-, W2-.
 * **weather_st124_2conf**: W1+, W2-, W1-, W2+.
@@ -164,7 +158,7 @@ Testing Datasets:
 * **weather_st124_4conf**: W2+, W1-, W2-, W1+.
 
 pretraining used Datasets:
-* **weather_pretraining**: W1
+* **weather_pretraining**: W3
 
 #### utils
 It contains all the pre-required functions such as preprocessing, metrics calculation, etc.
