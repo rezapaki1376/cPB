@@ -11,6 +11,8 @@ execute:
 
 `pip install -r requirements.txt`
 
+## 2) Project structure
+
 #### datasets
 
 # SINE
@@ -46,6 +48,7 @@ It contains the python modules implementing cPB and cGRU and the architecture of
 
 #### run-test
 This folder contains the Jupyter notebooks for running pre-trained models and executing the models.
+
 
 ## Credits
 [https://github.com/AndreaCossu/ContinualLearning-SequentialProcessing](https://github.com/federicogiannini13/cpnn)
