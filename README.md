@@ -50,7 +50,7 @@ In the SINE RW Mode, temporal dependency is introduced into the labels. Each lab
 
 
 $$
-y'_t = MODE (y_{t-1}, y_{t-2}, y_{t-3}, y_{t-4})
+y'_t =  (y_{t-1}, y_{t-2}, y_{t-3}, y_{t-4})
 $$
 
 
