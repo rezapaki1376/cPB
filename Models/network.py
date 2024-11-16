@@ -6,7 +6,8 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 from torch.nn.modules.utils import _pair
 from torch.nn.parameter import Parameter
-from models.PiggyBack import *
+from Models.PiggyBack import *
+from Models.pretrain import *
 import pickle
 
 
@@ -83,7 +84,7 @@ class ModifiedRNN(nn.Module):
         hidden_size=50,
         output_size=2,
         batch_size=128,
-        base_model="gru",
+        base_model="GRU",
         many_to_one=False,
         remember_states=None,
         bias=True,
@@ -121,7 +122,7 @@ class ModifiedRNN(nn.Module):
         self.base_model = base_model
 
         # Load pretrained model (GRU or LSTM)
-        if base_model == "gru":
+        if base_model == "GRU":
             self.pretrain_model = GRU_Model(
                 input_size=input_size,
                 device=torch.device("cpu"),
@@ -146,8 +147,8 @@ class ModifiedRNN(nn.Module):
         self.all_weights = self.pretrain_model.state_dict()
 
         # Initialize the piggyback model
-        if base_model == "gru":
-            self.classifier = cPBGRU(
+        if base_model == "GRU":
+            self.classifier = PBGRU(
                 input_size=input_size,
                 device=device,
                 num_layers=num_layers,
@@ -170,7 +171,7 @@ class ModifiedRNN(nn.Module):
                 mask_weights=mask_weights,
             )
         else:
-            self.classifier = cPBLSTM(
+            self.classifier = PBLSTM(
                 input_size=input_size,
                 device=device,
                 num_layers=num_layers,

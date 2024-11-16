@@ -10,7 +10,7 @@ from torch.nn.parameter import Parameter
 import Models.piggyback_layers as nl
 
 
-class cPBGRU(nn.Module):
+class PBGRU(nn.Module):
     """
     A piggyback-enabled GRU (Gated Recurrent Unit) model with element-wise masking for
     fine-grained weight adjustments.
@@ -100,7 +100,7 @@ class cPBGRU(nn.Module):
         seq_len=10,
         mask_weights=[],
     ):
-        super(cPBGRU, self).__init__()
+        super(PBGRU, self).__init__()
 
         # Initialize parameters
         self.input_size = input_size
@@ -188,7 +188,7 @@ class cPBGRU(nn.Module):
         return out
 
 
-class cPBLSTM(nn.Module):
+class PBLSTM(nn.Module):
     """
     A piggyback-enabled LSTM (Long Short-Term Memory) model with element-wise masking
     for fine-grained weight adjustments.
@@ -220,7 +220,7 @@ class cPBLSTM(nn.Module):
         seq_len=10,
         mask_weights=[],
     ):
-        super(cPBLSTM, self).__init__()
+        super(PBLSTM, self).__init__()
 
         # Initialize parameters
         self.input_size = input_size
