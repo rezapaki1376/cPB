@@ -1,23 +1,12 @@
 import pickle
-
 import torch
 import numpy as np
 from sklearn.metrics import accuracy_score, cohen_kappa_score
 from river import metrics
 import warnings
 
-from models.utils import (
-    customized_loss,
-    accuracy,
-    cohen_kappa,
-    get_samples_outputs,
-    get_pred_from_outputs,
-)
 import torch.utils.data as data_utils
 from torch.utils.data import DataLoader
-from models.clstm import (
-    cLSTMLinear,
-)
 
 
 class Preprocess:
@@ -26,14 +15,30 @@ class Preprocess:
     """
     def __init__(
         self,
-        seq_len: int = 10,
+        device=None,
+        lr: float = 0.01,
+        seq_len: int = 5,
+        stride: int = 1,
+        batch_size: int = 128,
     ):
         """
         Parameters
+        ----------
+        device: default: None.
+            Torch's device, if None its value is set to 'cpu'.
+        lr: float, default: 0.01.
+            The learning rate value of single columns' Adam Optimizer.
         seq_len: int, default: 5.
             The length of the sliding window that builds the single sequences.
+        stride: int, default: 1.
+            The length of the sliding window's stride.
+
         """
         self.seq_len = seq_len
+        self.stride = stride
+        self.x_batch = []
+        self.y_batch = []
+        self.batch_size = batch_size
 
     def get_seq_len(self):
         return self.seq_len
