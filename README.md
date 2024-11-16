@@ -42,8 +42,8 @@ S_2: x_1 - 0.5 - 0.3 \sin(3 \pi x_2) = 0
 $$
 
 These boundaries yield four classification functions:
-- $$S_{1+}$$ and $$S_{2+}$$: Assign a label "1" to points above the curve and "0" otherwise.
-- $$S_{1-}$$ and $$S_{2-}$$: Invert the labels of $$S_{1+}v and $$S_{2+}$$.
+- $$S1+$$ and $$S2+$$: Assign a label "1" to points above the curve and "0" otherwise.
+- $$S1-$$ and $$S2-$$: Invert the labels of $$S1+$$ and $$S2+$$.
 
 ### Temporal Label Dependency
 In the SINE RW Mode, temporal dependency is introduced into the labels. Each label \(y'_t\) is determined based on the most frequent label from the last four time steps:
@@ -55,11 +55,9 @@ $$
 
 
 ### Concept Drift
-The data stream transitions between boundary functions (\(S_1\) and \(S_2\)) to simulate mild and severe concept drifts. For example:
-- Mild drift: \(S_{1+} \to S_{2+}\)
-- Severe drift: \(S_{2+} \to S_{1-}\)
-
-By varying parameters \(\alpha\), \(\beta\), and \(\gamma\), new boundary functions can be created to test model adaptability to unique temporal patterns.
+The data stream transitions between boundary functions ($$S_1$$ and $$S_2$$) to simulate mild and severe concept drifts. For example:
+- Mild drift: $$S_{1+} \to S_{2+}$$
+- Severe drift: $$S_{2+} \to S_{1-}$$
 
 ---
 
@@ -69,15 +67,15 @@ This dataset, provided by the Agricultural Research Service of the U.S. Departme
 
 ### Features
 The dataset includes the following features:
-- Air temperature (\(T_a\)) in °C.
-- Relative humidity (\(RH\)) in percentage.
-- Wind speed (\(w_s\)) in m/s.
-- Wind direction (\(w_d\)) in degrees (0°–360°).
-- Dew point temperature (\(T_d\)) in °C.
+- Air temperature $$(T_a)$$in °C.
+- Relative humidity $$(RH)$$ in percentage.
+- Wind speed $$(w_s)$$ in m/s.
+- Wind direction $$(w_d)$$ in degrees (0°–360°).
+- Dew point temperature $$(T_d)$$ in °C.
 
 ### Preprocessing
 - Features are standardized using a Robust Scaler to ensure comparability.
-- Temporal dependencies are embedded by defining binary classification functions based on \(T_a\).
+- Temporal dependencies are embedded by defining binary classification functions based on $$T_a$$.
 
 ### Classification Functions
 The dataset uses three sets of boundary functions:
@@ -85,7 +83,7 @@ The dataset uses three sets of boundary functions:
 **Short-Term Dynamics**:
 
 $$
-W_{1+}: y(X_t) = 
+W1+: y(X_t) = 
 \begin{cases} 
 1, & \text{if } T_a(t) \geq T_a(t-1) \\
 0, & \text{otherwise}
@@ -93,7 +91,7 @@ W_{1+}: y(X_t) =
 $$
 
 $$
-W_{1-}: y(X_t) = 
+W1-: y(X_t) = 
 \begin{cases} 
 1, & \text{if } T_a(t) < T_a(t-1) \\
 0, & \text{otherwise}
@@ -103,7 +101,7 @@ $$
 **Extended Temporal Dependencies**:
 
 $$
-W_{2+}: y(X_t) = 
+W2+: y(X_t) = 
 \begin{cases} 
 1, & \text{if } T_a(t) \geq \text{Median}(T_a(t-10), \dots, T_a(t-1)) \\
 0, & \text{otherwise}
@@ -111,7 +109,7 @@ W_{2+}: y(X_t) =
 $$
 
 $$
-W_{2-}: y(X_t) = 
+W2-: y(X_t) = 
 \begin{cases} 
 1, & \text{if } T_a(t) < \text{Median}(T_a(t-10), \dots, T_a(t-1)) \\
 0, & \text{otherwise}
@@ -121,7 +119,7 @@ $$
 **Pre-Training Function**:
 
 $$
-W_{3+}: y(X_t) = 
+W3+: y(X_t) = 
 \begin{cases} 
 1, & \text{if } T_a(t) \geq \text{Min}(T_a(t-10), \dots, T_a(t-1)) \\
 0, & \text{otherwise}
@@ -129,14 +127,14 @@ W_{3+}: y(X_t) =
 $$
 
 $$
-W_{3-}: y(X_t) = 
+W3-: y(X_t) = 
 \begin{cases} 
 1, & \text{if } T_a(t) < \text{Min}(T_a(t-10), \dots, T_a(t-1)) \\
 0, & \text{otherwise}
 \end{cases}
 $$
 
-The functions \(W_{1+}\) and \(W_{1-}\) reflect immediate changes, capturing short-term temporal dynamics by comparing the current \(T_a\) value against its immediate predecessor. In contrast, \(W_{2+}\), \(W_{2-}\), \(W_{3+}\), and \(W_{3-}\) capture more extended temporal dependencies by considering the median or minimum of \(T_a\) over the last ten time steps.
+The functions $$W1+$$ and $$W1-$$ reflect immediate changes, capturing short-term temporal dynamics by comparing the current $$T_a$$ value against its immediate predecessor. In contrast, $$W_{2+}$$, $$W2-$$, $$W3+$$, and $$W3-$$ capture more extended temporal dependencies by considering the median or minimum of $$T_a$$ over the last ten time steps.
 
 ---
 
@@ -163,7 +161,7 @@ Testing Datasets:
 * **weather_st124_1conf**: W1+, W2+, W1-, W2-.
 * **weather_st124_2conf**: W1+, W2-, W1-, W2+.
 * **weather_st124_3conf**: W2+, W1+, W2-, W1-.
-* **weather_st124_4conf**: w2+, W1-, W2-, W1+.
+* **weather_st124_4conf**: W2+, W1-, W2-, W1+.
 
 pretraining used Datasets:
 * **weather_pretraining**: W1
