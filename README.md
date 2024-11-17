@@ -167,9 +167,10 @@ It contains the python modules implementing cPB and cGRU and the architecture of
 This folder contains the Jupyter notebooks for running pre-trained models and executing the models. This folder contains 4 Jupyter notebooks. 
 
 * **PretrainModelCreation.ipynb**: By this file, pre-trained models can be created for the use of cPB and cGRU models.
-* ** Run-test-cPB-Periodic. ipynb**: This file contains executable codes and configs for the cPB model in the periodic classifier scenario.
-* ** Run-test-cPB-Anytime. ipynb**: This file contains executable codes and configs for the cPB model in the Anytime classifier scenario.
+* **Run-test-cPB-Periodic. ipynb**: This file contains executable codes and configs for the cPB model in the periodic classifier scenario.
+* **Run-test-cPB-Anytime. ipynb**: This file contains executable codes and configs for the cPB model in the Anytime classifier scenario.
 * **Run-test-cGRU-Periodic-Anytime.ipynb**: In this file, there are executable codes and configs for the cGRU model in both the Periodic and the Anytime classifier scenario.
+
 ##### IMPORTANT: before running each model the config cell should be configured with our desired configs. The parameters of the models the input data and the pre-trained models should be defined.
 reza.paki@mail.polimi.it
 ## Contact:
