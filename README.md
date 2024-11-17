@@ -175,7 +175,14 @@ This folder contains the Jupyter notebooks for running pre-trained models and ex
 
 ## Contact:
 reza.paki@mail.polimi.it
+
+## Collaborators 
+[Federico Giannini](https://github.com/federicogiannini13)
+[Emanuele Della Valle](https://github.com/emanueledellavalle)
 ## Credits
 [https://github.com/AndreaCossu/ContinualLearning-SequentialProcessing](https://github.com/federicogiannini13/cpnn)
 
 [https://github.com/gziffer/tenet?tab=readme-ov-file](https://github.com/gziffer/tenet?tab=readme-ov-file)
+
+
+
