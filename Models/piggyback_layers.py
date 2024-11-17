@@ -121,6 +121,7 @@ class ElementWiseLSTM(nn.Module):
         self.LSTM_weights=LSTM_weights
         self.seq_len=seq_len,
         self.LSTM_mask_weights=LSTM_mask_weights
+        self.many_to_one = many_to_one
 
 
         if threshold is None:
@@ -208,6 +209,11 @@ class ElementWiseLSTM(nn.Module):
         out = LSTMBlockMath(input, self.hx, weight_thresholded_ih, weight_thresholded_hh,
                                 weight_thresholded_bias_ih, weight_thresholded_bias_hh, self.batch_size, self.bias, self.num_layers, self.dropout,
                                 self.training, self.bidirectional, self.batch_first)
+        
+        if self.many_to_one:
+            out = out[:, -1, :]
+        else:
+            out = out
 
         return out
     def _build_initial_state(self, x, state):
@@ -286,6 +292,7 @@ class ElementWiseGRU(nn.Module):
         self.GRU_weights=GRU_weights
         self.seq_len=seq_len,
         self.GRU_mask_weights=GRU_mask_weights
+        self.many_to_one = many_to_one
 
         self.h0 = np.zeros((1, self.hidden_size))
 
@@ -370,6 +377,11 @@ class ElementWiseGRU(nn.Module):
         out,_ = GRUBlockMath(input, self.hn, weight_thresholded_ih, weight_thresholded_hh,
                                 weight_thresholded_bias_ih, weight_thresholded_bias_hh, self.batch_size, self.bias, self.num_layers, self.dropout,
                                 self.training, self.bidirectional, self.batch_first)
+
+        if self.many_to_one:
+            out = out[:, -1, :]
+        else:
+            out = out
 
 
         return out

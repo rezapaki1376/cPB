@@ -1,138 +1,336 @@
-class cPB:
-    """
-    Class that implements the cPNN (Custom Piggyback Neural Network) structure for task-specific learning
-    with weight-sharing and mask-based adaptation.
+from river import metrics
+import numpy as np
+import pickle
 
-    Parameters
-    ----------
-    model_class : class, default=PBGRU
-        The base model class used in the network (e.g., PBGRU or PBLSTM).
-    hidden_size : int, default=50
-        Number of hidden units in the model.
-    device : torch.device or None, default=None
-        Device to run the model ('cpu' or 'cuda').
-    stride : int, default=1
-        Stride length for splitting sequences.
-    lr : float, default=0.01
-        Learning rate for training.
-    seq_len : int, default=5
-        Length of input sequences.
-    base_model : str, default='GRU'
-        Type of base model to use ('GRU' or 'LSTM').
-    pretrain_model_addr : str, default=''
-        Path to the pretrained model weights.
-    mask_weights : list, default=[]
-        Weights used for masks in piggyback models.
-    mask_init : str, default='uniform'
-        Initialization method for masks.
-    number_of_tasks : int, default=4
-        Number of tasks to be handled by the model.
-    epoch_size : int, default=10
-        Number of epochs for training each task.
-    input_size : int, default=2
-        Number of input features.
-    **kwargs : dict
-        Additional parameters for model initialization.
+import torch
+import warnings
+from utils.utils import (
+    customized_loss,
+    accuracy,
+    cohen_kappa,
+    kappa_temporal,
+    get_samples_outputs,
+    get_pred_from_outputs, kappa_temporal_score,
+)
+import torch.utils.data as data_utils
+from torch.utils.data import DataLoader
+import copy
+from Models.PiggyBack import(
+	PBGRU,
+  	PBLSTM,
+)
 
-    Attributes
-    ----------
-    model : ModifiedRNN
-        The neural network model for handling task-specific weights and masks.
-    loss_fn : torch.nn.CrossEntropyLoss
-        Loss function used during training.
-    weights_list : list
-        List of task-specific weights for the model.
-    performance : dict
-        Dictionary to store metrics (accuracy and Cohen Kappa) for each task.
-    """
+from Models.network import ModifiedRNN
 
-    def __init__(self, model_class=PBGRU, hidden_size=50, device=None, stride=1, lr=0.01,
-                 seq_len=5, base_model='GRU', pretrain_model_addr='', mask_weights=[],
-                 mask_init='uniform', number_of_tasks=4, epoch_size=10, input_size=2, **kwargs):
-        """
-        Initializes the cPB class with parameters for task-specific weight-sharing and mask handling.
-        """
+import matplotlib.pyplot as plt
+
+
+class cPB_SML:
+    def __init__(
+        self,
+        # this parameter is useless and i should remove it
+        hidden_size=50,
+        device=None,
+        stride: int = 1,
+        lr: float = 0.01,
+        seq_len: int = 5,
+        base_model='GRU',
+        pretrain_model_addr='',
+        mask_weights=[],
+        mask_init='1s',
+        number_of_tasks=4,
+        epoch_size=10,
+        input_size=2,
+        many_to_one = False,
+        EndOfTask = 188,
+        **kwargs,
+
+    ):
         self.loss_fn = torch.nn.CrossEntropyLoss(reduction="mean")
-        self.stride = stride
-        self.seq_len = seq_len
-        self.lr = lr
+        self.stride=stride
+        self.seq_len=seq_len
+        self.lr=lr
         self.hidden_size = hidden_size
-        self.base_model = base_model
-        self.pretrain_model_addr = pretrain_model_addr
-        self.mask_init = mask_init
-        self.weights_list = []
-        self.selected_mask_index = []
-        self.epoch_size = epoch_size
-        self.input_size = input_size
-        self.all_batch_acc = [[] for _ in range(number_of_tasks)]
-        self.all_batch_kappa = [[] for _ in range(number_of_tasks)]
+        self.base_model=base_model
+        self.pretrain_model_addr=pretrain_model_addr
+        self.mask_init=mask_init
+        self.weights_list=[]
+        self.selected_mask_index=[]
+        self.epoch_size=epoch_size
+        self.input_size=input_size
+        self.mask_weights=mask_weights
+        self.all_models_weight=[]
+        self.performance=dict()
+        self.performance[f'task_{1}']={}
+        self.performance[f'task_{1}']['acc']=[]
+        self.performance[f'task_{1}']['kappa']=[]
         self.acc_saving = [[]]
-        self.cohen_kappa_saving = [[]]
-        self.all_models_weight = []
-        self.performance = dict()
+        self.cohen_kappa_saving=[[]]
+        self.mask_selection=True
+        self.many_to_one=many_to_one
 
-        # Initialize the model with pretrained weights if available
-        if pretrain_model_addr != '':
-            self.model = ModifiedRNN(pretrain_model_addr=pretrain_model_addr,
-                                     hidden_size=self.hidden_size, base_model=base_model,
-                                     seq_len=seq_len, mask_weights=mask_weights,
-                                     mask_init=mask_init, input_size=self.input_size)
-            self.initial_weights = self.model.state_dict()
-        self.all_models_weight.append([])
+        if base_model=='GRU':
+            self.model = ModifiedRNN(pretrain_model_addr=pretrain_model_addr,hidden_size=self.hidden_size,base_model=base_model,seq_len=seq_len,mask_weights=mask_weights,mask_init=mask_init,input_size=self.input_size,many_to_one=self.many_to_one)
+        elif base_model=='LSTM':
+            self.model = ModifiedRNN(pretrain_model_addr=pretrain_model_addr,hidden_size=self.hidden_size,base_model=base_model,seq_len=seq_len,mask_weights=mask_weights,mask_init=mask_init,input_size=self.input_size,many_to_one=self.many_to_one)
+        self.current_task_index=1
+        self.device=device
+        self.previous_data_points_anytime_inference = None
+        self.previous_data_points_anytime_train = None
+        self.previous_data_points_batch_train = None
+        self.previous_data_points_batch_test = None
+        # self.base_learner
+        self.masks = []
+        self.ensemble = []
+        self.ensemble.append(self.model)
+        self.selected_model = 0
+        self.acc_saving = [[metrics.Accuracy()] for _ in range(len(self.ensemble))]
+        self.cohen_kappa_saving = [[metrics.CohenKappa()] for _ in range(len(self.ensemble))]
+        self.all_batch_acc=[[] for _ in range(number_of_tasks)]
+        self.all_batch_kappa=[[] for _ in range(number_of_tasks)]
+        self.performance_CC = [[copy.deepcopy(metrics.CohenKappa())] for _ in range(len(self.ensemble))]
+        self.performance_ACC = [[copy.deepcopy(metrics.Accuracy())] for _ in range(len(self.ensemble))]
+        self.predictions = [[] for _ in range(0, len(self.ensemble))] # len(ensemble), batch_size
+        self.count = 0
+        self.EndOfTask = EndOfTask
+
+        self.selected_model_index=[]
+
+
+    def predict_one(self, x: np.array, previous_data_points: np.array = None):
+        x = np.array(x).reshape(1, -1)
+        if previous_data_points is not None:
+            self.previous_data_points_anytime_inference = previous_data_points
+        if self.previous_data_points_anytime_inference is None:
+            self.previous_data_points_anytime_inference = x
+            for i, model in enumerate(self.ensemble):
+              self.predictions[i].append([0])
+            return None
+        if len(self.previous_data_points_anytime_inference) != self.seq_len - 1:
+            self.previous_data_points_anytime_inference = np.concatenate(
+                [self.previous_data_points_anytime_inference, x]
+            )
+            for i, model in enumerate(self.ensemble):
+              self.predictions[i].append([0])
+            return None
+        self.previous_data_points_anytime_inference = np.concatenate(
+            [self.previous_data_points_anytime_inference, x]
+        )
+        x = self._convert_to_tensor_dataset(
+            self.previous_data_points_anytime_inference
+        )
+        self.previous_data_points_anytime_inference = (
+            self.previous_data_points_anytime_inference[1:]
+        )
+            #return int(pred[-1].detach().cpu().numpy())
+
+        for i, model in enumerate(self.ensemble):
+            with torch.no_grad():
+              self.loss_on_seq=True
+              if not self.loss_on_seq:
+                  pred, _ = get_pred_from_outputs(self.ensemble[i](x)[0])
+              else:
+                  pred, _ = get_pred_from_outputs(self.ensemble[i](x))
+
+            self.predictions[i].append(pred)
+        #return self.predictions[self.selected_model][-1]
+
+    def learn_many(self, x, y):
+
+        for i, p in enumerate(self.predictions): # iterate on each mask in the ensemble
+            for j in range(len(y)): # iterating on each prediction of the mask i
+
+                self.performance_CC[i][0].update(int(p[j][0]), int(y[j]))
+                self.performance_ACC[i][0].update(int(p[j][0]), int(y[j]))
+                self.acc_saving[i].append(copy.deepcopy(self.performance_ACC[i][0]))
+                self.cohen_kappa_saving[i].append(copy.deepcopy(self.performance_CC[i][0]))
+                if self.mask_selection==False:
+                    self.performance[f'task_{self.current_task_index}']['acc'].append(copy.deepcopy(self.performance_ACC[i][0]))
+                    self.performance[f'task_{self.current_task_index}']['kappa'].append(copy.deepcopy(self.performance_CC[i][0]))
+
+
+
+        self.selected_model = np.argmax([self.performance_CC[i][0].get() for i in range(len(self.performance_CC))])
+
+        self.count += 1
+        if self.count == 50:
+            self.mask_selection=False
+
+            self.selected_model_index.append(self.selected_model)
+            self.performance[f'task_{self.current_task_index}']['acc']=copy.deepcopy(self.acc_saving[self.selected_model])
+            self.performance[f'task_{self.current_task_index}']['kappa']=copy.deepcopy(self.cohen_kappa_saving[self.selected_model])
+            self.ensemble = [self.ensemble[self.selected_model]]
+            self.performance_CC = [self.performance_CC[self.selected_model]]
+            self.performance_ACC = [self.performance_ACC[self.selected_model]]
+            self.predictions = [self.predictions[self.selected_model]]
+            self.selected_model = 0
+
+
+
+        self.predictions=[[] for _ in range(len(self.ensemble))]
+        x = np.array(x)
+        y = list(y)
+        first_batch = False
+        self.loss_on_seq=True
+        if self.loss_on_seq:
+            if self.previous_data_points_batch_train is None:
+                first_batch = True
+            else:
+                x = np.concatenate([x, self.previous_data_points_batch_train], axis=0)
+                self.previous_data_points_batch_train = x[-(self.seq_len - 1) :]
+        x, y, y_seq = self._load_batch(x, y)
+        if first_batch:
+            y = y[self.seq_len - 1 :]
+        x, y = x.to(self.device), y.to(self.device)
+
+        for i,model in enumerate(self.ensemble):
+            for e in range(1, self.epoch_size + 1):
+
+              outputs = model(x)
+
+              if not self.loss_on_seq:
+                  outputs = get_samples_outputs(outputs)
+              loss = self.loss_fn(outputs, y)
+              optimizer = torch.optim.Adam(model.parameters(), lr=self.lr)
+              optimizer.zero_grad()
+              loss.backward(retain_graph=True)
+              optimizer.step()
+              self.ensemble[i]=model
 
     def get_seq_len(self):
-        """
-        Returns the sequence length used in the model.
-
-        Returns
-        -------
-        int
-            The sequence length.
-        """
         return self.seq_len
 
-    def _cut_in_sequences(self, x, y):
+    def predict_many(self, x: np.array, column_id: int = None):
+        x = np.array(x)
+        if x.shape[0] < self.get_seq_len():
+            return np.array([None] * x.shape[0])
+        first_train = False
+        self.loss_on_seq=True
+        if self.loss_on_seq:
+            if self.previous_data_points_batch_train is not None:
+                x = np.concatenate([x, self.previous_data_points_batch_train], axis=0)
+                self.previous_data_points_batch_train = x[-(self.seq_len - 1) :]
+            else:
+                first_train = True
+        x = self._convert_to_tensor_dataset(x).to(self.device)
+        with torch.no_grad():
+            outputs = self.ensemble[0](x)
+            if not self.loss_on_seq:
+                outputs = get_samples_outputs(outputs)
+            pred, _ = get_pred_from_outputs(outputs)
+            pred = pred.detach().cpu().numpy()
+            if first_train:
+                return np.concatenate(
+                    [np.array([None for _ in range(self.seq_len - 1)]), pred], axis=0
+                )
+            return pred
+    def add_new_column(self,task):
+        self.mask_selection=True
+        self.current_task_index+=1
+        self.performance[f'task_{self.current_task_index}']={}
+        self.performance[f'task_{self.current_task_index}']['acc']=[]
+        self.performance[f'task_{self.current_task_index}']['kappa']=[]
+        print('after concept drift')
+        print('self.performance_CC',self.performance_CC)
+        print('self.performance_ACC',self.performance_ACC)
+        param_list=[]
+        weights_list=[]
+        weights_list=copy.deepcopy(self.ensemble[0].state_dict())
+        for params in weights_list:
+          param_list.append(params)
+
+        mask_weights=[]
+        mask_weights.append(weights_list[param_list[-5]])
+        mask_weights.append(weights_list[param_list[-4]])
+        mask_weights.append(weights_list[param_list[-3]])
+        mask_weights.append(weights_list[param_list[-2]])
+        mask_weights.append(weights_list[param_list[-1]])
+        self.model=ModifiedRNN(pretrain_model_addr=self.pretrain_model_addr, hidden_size= self.hidden_size,
+                              base_model=self.base_model,seq_len=self.seq_len,mask_weights=mask_weights,
+                              mask_init=self.mask_init,input_size=self.input_size,many_to_one=self.many_to_one)
+        self.masks.append(self.model)
+        #self.ensemble=[[] for _ in range(len(self.masks))]
+        self.ensemble=[]
+        for i in range(len(self.masks)):
+          weights_list=[]
+          weights_list=copy.deepcopy(self.masks[i].state_dict())
+          for params in weights_list:
+            param_list.append(params)
+
+          mask_weights=[]
+          mask_weights.append(weights_list[param_list[-5]])
+          mask_weights.append(weights_list[param_list[-4]])
+          mask_weights.append(weights_list[param_list[-3]])
+          mask_weights.append(weights_list[param_list[-2]])
+          mask_weights.append(weights_list[param_list[-1]])
+          self.model=ModifiedRNN(pretrain_model_addr=self.pretrain_model_addr, hidden_size= self.hidden_size,
+                                base_model=self.base_model,seq_len=self.seq_len,mask_weights=mask_weights,
+                                mask_init=self.mask_init,input_size=self.input_size,many_to_one=self.many_to_one)
+
+          self.ensemble.append(self.model)
+        mask_weights=[]
+        self.model = ModifiedRNN(pretrain_model_addr=self.pretrain_model_addr,hidden_size=self.hidden_size,base_model=self.base_model,seq_len=self.seq_len,mask_weights=self.mask_weights,mask_init=self.mask_init,input_size=self.input_size,many_to_one=self.many_to_one)
+
+        self.ensemble.append(self.model) # random initialized
+        self.acc_saving = [[] for _ in self.ensemble]
+        self.cohen_kappa_saving = [[] for _ in self.ensemble]
+        self.reset_previous_data_points()
+        self.count = 0
+        self.performance_CC = [[copy.deepcopy(metrics.CohenKappa())] for _ in range(len(self.ensemble))]
+        self.performance_ACC = [[copy.deepcopy(metrics.Accuracy())] for _ in range(len(self.ensemble))]
+        self.predictions = [[] for _ in range(len(self.ensemble))] # len(ensemble), batch_size
+
+    def reset_previous_data_points(self):
+        self.previous_data_points_batch_train = None
+        self.previous_data_points_anytime_train = None
+        self.previous_data_points_anytime_inference = None
+
+    def _load_batch(self, x: np.array, y: np.array = None):
         """
-        Splits the data into sequences of specified length with the given stride.
+        It transforms the batch in order to be inputted to cPNN, by building the different sequences and
+        converting them to tensors.
 
         Parameters
         ----------
-        x : numpy.ndarray
-            Input features.
-        y : numpy.ndarray or None
-            Labels corresponding to the input features.
-
+        x: numpy.array
+            The features values of the batch.
+        y: list, default: None.
+            The target values of the batch. If None only features will be loaded.
         Returns
         -------
-        seqs_features : numpy.ndarray
-            Features split into sequences.
-        seqs_targets : numpy.ndarray
-            Labels split into sequences.
+        x: torch.Tensor
+            The features values of the created sequences. It has shape: (batch_size - seq_len + 1, seq_len, n_features)
+        y: torch.Tensor
+            The target values of the samples in the batc. It has length: batch_size. If y is None it returns None.
+        y_seq: torch.Tensor
+            The target values of the created sequences. It has shape: (batch_size - seq_len + 1, seq_len). If y is None it returns None.
         """
-        seqs_features = []
-        seqs_targets = []
-        for i in range(0, len(x), self.stride):
-            if len(x) - i >= self.seq_len:
-                seqs_features.append(x[i: i + self.seq_len, :].astype(np.float32))
-                if y is not None:
-                    seqs_targets.append(np.asarray(y[i: i + self.seq_len], dtype=np.int_))
-        return np.asarray(seqs_features), np.asarray(seqs_targets)
-
+        batch = self._convert_to_tensor_dataset(x, y)
+        batch_loader = DataLoader(
+            batch, batch_size=batch.tensors[0].size()[0], drop_last=False
+        )
+        y_seq = None
+        for x, y_seq in batch_loader:  # only to take x and y from loader
+            break
+        y = torch.tensor(y)
+        return x, y, y_seq
     def _convert_to_tensor_dataset(self, x, y=None):
         """
-        Converts the input features and labels into a TensorDataset.
+        It converts the dataset in order to be inputted to cPNN, by building the different sequences and
+        converting them to TensorDataset.
 
         Parameters
         ----------
-        x : numpy.ndarray
-            Input features.
-        y : numpy.ndarray or None
-            Labels corresponding to the input features.
-
+        x: numpy.array
+            The features values of the batch.
+        y: list, default: None
+            The target values of the batch. If None only features will be loaded.
         Returns
         -------
-        dataset : torch.utils.data.TensorDataset
-            A TensorDataset containing the features and labels.
+        dataset: torch.data_utils.TensorDataset
+            The tensor dataset representing the different sequences.
+            The features values have shape: (batch_size - seq_len + 1, seq_len, n_features)
+            The target values have shape: (batch_size - seq_len + 1, seq_len)
         """
         x, y = self._cut_in_sequences(x, y)
         x = torch.tensor(x)
@@ -140,142 +338,27 @@ class cPB:
             y = torch.tensor(y).type(torch.LongTensor)
             return data_utils.TensorDataset(x, y)
         return x
+    def _cut_in_sequences(self, x, y):
+        seqs_features = []
+        seqs_targets = []
+        for i in range(0, len(x), self.stride):
+            if len(x) - i >= self.seq_len:
+                seqs_features.append(x[i : i + self.seq_len, :].astype(np.float32))
+                if y is not None:
+                    seqs_targets.append(
+                        np.asarray(y[i : i + self.seq_len], dtype=np.int_)
+                    )
+        return np.asarray(seqs_features), np.asarray(seqs_targets)
 
-    def learn_many(self, x, y, task_number):
-        """
-        Trains the model on a batch of data for a specific task.
-
-        Parameters
-        ----------
-        x : numpy.ndarray
-            Input features.
-        y : numpy.ndarray
-            Labels corresponding to the input features.
-        task_number : int
-            Index of the task to train on.
-        """
-        self.model = self.rebuild_model(task_number)
-        x = np.array(x)
-        y = list(y)
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
-        x, y, _ = self._load_batch(x, y)
-        for _ in range(self.epoch_size):
-            optimizer.zero_grad()
-            y_pred = self.model(x)
-            y_pred = get_samples_outputs(y_pred)
-            loss = self.loss_fn(y_pred, y)
-            loss.backward(retain_graph=True)
-            optimizer.step()
-        self.update_weights(task_number)
-
-    def rebuild_model(self, task_number):
-        """
-        Rebuilds the model for a specific task using the corresponding weights.
-
-        Parameters
-        ----------
-        task_number : int
-            Index of the task to rebuild the model for.
-
-        Returns
-        -------
-        model : ModifiedRNN
-            The rebuilt model with task-specific weights.
-        """
-        param_list = []
-        for params in self.weights_list[task_number]:
-            param_list.append(params)
-
-        mask_weights = [
-            self.weights_list[task_number][param_list[-5]],
-            self.weights_list[task_number][param_list[-4]],
-            self.weights_list[task_number][param_list[-3]],
-            self.weights_list[task_number][param_list[-2]],
-            self.weights_list[task_number][param_list[-1]],
-        ]
-        self.model = ModifiedRNN(pretrain_model_addr=self.pretrain_model_addr,
-                                 hidden_size=self.hidden_size, base_model=self.base_model,
-                                 seq_len=self.seq_len, mask_weights=mask_weights,
-                                 mask_init=self.mask_init, input_size=self.input_size)
-        return self.model
-
-    def predict_many(self, x, y, mask_number, task_number, mask_selection=False):
-        """
-        Makes predictions for a batch of data for a specific task.
-
-        Parameters
-        ----------
-        x : numpy.ndarray
-            Input features.
-        y : numpy.ndarray
-            Labels corresponding to the input features.
-        mask_number : int
-            Index of the mask to use for predictions.
-        task_number : int
-            Index of the task to predict on.
-        mask_selection : bool, default=False
-            Whether to use mask selection.
-
-        Returns
-        -------
-        None
-        """
-        self.model = self.rebuild_model(mask_number)
-        x = np.array(x)
-        y = list(y)
-        x, y, _ = self._load_batch(x, y)
-        y_pred = self.model(x)
-        y_pred = get_samples_outputs(y_pred)
-        pred, _ = get_pred_from_outputs(y_pred)
-        kappa = cohen_kappa(y, pred).item()
-        acc = accuracy_score(np.array(y), np.array(pred))
-        self.acc_saving[mask_number].append(acc)
-        self.cohen_kappa_saving[mask_number].append(kappa)
-        if not mask_selection:
-            self.performance[f'task_{task_number}']['acc'].append(acc)
-            self.performance[f'task_{task_number}']['kappa'].append(kappa)
-
-    def plotting(self):
-        """
-        Plots the cumulative accuracy and Cohen Kappa for all tasks.
-
-        Displays
-        -------
-        - A line plot showing cumulative accuracy over batches.
-        - A line plot showing cumulative Cohen Kappa over batches.
-        """
-        x0 = np.cumsum(self.all_batch_acc[0]) / np.arange(1, len(self.all_batch_acc[0]) + 1)
-        x1 = np.cumsum(self.all_batch_acc[1]) / np.arange(1, len(self.all_batch_acc[1]) + 1)
-        x2 = np.cumsum(self.all_batch_acc[2]) / np.arange(1, len(self.all_batch_acc[2]) + 1)
-        x3 = np.cumsum(self.all_batch_acc[3]) / np.arange(1, len(self.all_batch_acc[3]) + 1)
-        all_x = np.concatenate((x0, x1, x2, x3), axis=0)
-        vertical_lines_x = [len(x0), len(x0) + len(x1), len(x0) + len(x1) + len(x2)]
-        y = all_x
-        x = list(range(1, len(all_x) + 1))
-        fig, ax = plt.subplots(figsize=(12, 4))
-        ax.margins(x=0.0)
-        for i in vertical_lines_x:
-            plt.axvline(x=i, color='#D3D3D3', linestyle='-')
-        ax.plot(x, y, color='#ff1d58')
-        plt.xlabel('Batch Number')
-        plt.ylabel('Cumulative Accuracy')
-        plt.title('Cumulative Accuracy Over Batches')
-        plt.legend()
-        plt.show()
-
-        x0 = np.cumsum(self.all_batch_kappa[0]) / np.arange(1, len(self.all_batch_kappa[0]) + 1)
-        x1 = np.cumsum(self.all_batch_kappa[1]) / np.arange(1, len(self.all_batch_kappa[1]) + 1)
-        x2 = np.cumsum(self.all_batch_kappa[2]) / np.arange(1, len(self.all_batch_kappa[2]) + 1)
-        x3 = np.cumsum(self.all_batch_kappa[3]) / np.arange(1, len(self.all_batch_kappa[3]) + 1)
-        all_x = np.concatenate((x0, x1, x2, x3), axis=0)
-        y = all_x
-        fig, ax = plt.subplots(figsize=(12, 4))
-        ax.margins(x=0.0)
-        for i in vertical_lines_x:
-            plt.axvline(x=i, color='#D3D3D3', linestyle='-')
-        ax.plot(x, y, color='#ff1d58')
-        plt.xlabel('Batch Number')
-        plt.ylabel('Cumulative Cohen Kappa')
-        plt.title('Cumulative Cohen Kappa Over Batches')
-        plt.legend()
-        plt.show()
+    def _cut_in_sequences_tensors(self, x, y):
+        seqs_features = []
+        seqs_targets = []
+        for i in range(0, x.size()[0], self.stride):
+            if x.size()[0] - i >= self.seq_len:
+                seqs_features.append(
+                    x[i : i + self.seq_len, :].view(1, self.seq_len, x.size()[1])
+                )
+                seqs_targets.append(y[i : i + self.seq_len].view(1, self.seq_len))
+        seq_features = torch.cat(seqs_features, dim=0)
+        seqs_targets = torch.cat(seqs_targets, dim=0)
+        return seq_features, seqs_targets

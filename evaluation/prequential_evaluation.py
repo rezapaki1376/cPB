@@ -9,7 +9,7 @@ import os
 import numpy as np
 
 from evaluation.learner_config import LearnerConfig
-from models.temporally_augmented_classifier import TemporallyAugmentedClassifier
+from Models.temporally_augmented_classifier import TemporallyAugmentedClassifier
 
 
 def make_dir(path):

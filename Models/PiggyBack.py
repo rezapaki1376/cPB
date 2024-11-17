@@ -157,6 +157,7 @@ class PBGRU(nn.Module):
                 GRU_weights=self.GRU_weights,
                 seq_len=self.seq_len,
                 GRU_mask_weights=self.GRU_mask_weights,
+                many_to_one=many_to_one,
             ),
             nl.ElementWiseLinear(
                 in_features=hidden_size,
@@ -277,6 +278,7 @@ class PBLSTM(nn.Module):
                 LSTM_weights=self.LSTM_weights,
                 seq_len=self.seq_len,
                 LSTM_mask_weights=self.LSTM_mask_weights,
+                many_to_one=many_to_one,
             ),
             nl.ElementWiseLinear(
                 in_features=hidden_size,

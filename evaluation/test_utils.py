@@ -3,9 +3,9 @@ import pickle
 import river
 from river import tree
 from evaluation.learner_config import LearnerConfig
-from models.clstm import cLSTMLinear
-from models.cpnn import cPNN
-from models.temporally_augmented_classifier import TemporallyAugmentedClassifier
+from Models.clstm import cLSTMLinear
+from Models.cpnn import cPNN
+from Models.temporally_augmented_classifier import TemporallyAugmentedClassifier
 
 
 NUM_OLD_LABELS = 0
