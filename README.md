@@ -14,13 +14,13 @@ execute:
 ## 2) Project structure
 
 
-# Dataset Description
+## Dataset Description
 
 This repository includes synthetic and real-world datasets designed for evaluating temporal dependencies and contextual complexities in machine learning models. Below is a comprehensive description of the datasets used.
 
 ---
 
-## SINE Data Stream
+### SINE Data Stream
 
 The **SINE** data generator creates two-dimensional data points for classification tasks using a sine function as its core feature. Originally, it lacked temporal dependencies. However, in this repository, we use the **SINE RW Mode**, an advanced version of SINE, which incorporates temporal dependencies within both features and labels. This enhances its suitability for machine learning models designed to handle sequential and interdependent data.
 
@@ -46,7 +46,7 @@ These boundaries yield four classification functions:
 - $$S1-$$ and $$S2-$$: Invert the labels of $$S1+$$ and $$S2+$$.
 
 ### Temporal Label Dependency
-In the SINE RW Mode, temporal dependency is introduced into the labels. Each label \(y'_t\) is determined based on the most frequent label from the last four time steps:
+In the SINE RW Mode, temporal dependency is introduced into the labels. Each label $$y'_t$$ is determined based on the most frequent label from the last four time steps:
 
 
 $$
@@ -56,17 +56,17 @@ $$
 
 ### Concept Drift
 The data stream transitions between boundary functions ($$S_1$$ and $$S_2$$) to simulate mild and severe concept drifts. For example:
-- Mild drift: $$S_{1+} \to S_{2+}$$
-- Severe drift: $$S_{2+} \to S_{1-}$$
+- Mild drift: $$S{1+} \to S{2+}$$
+- Severe drift: $$S{2+} \to S{1-}$$
 
 
-Testing Datasets:
+### Testing Datasets:
 * **sine_rw10_mode5_extended_16-16_1234**: S1+, S2+, S1-, S2-.
 * **sine_rw10_mode5_extended_16-16_1432**: S1+, S2-, S1-, S2+.
 * **sine_rw10_mode5_extended_16-16_2143**: S2+, S1+, S2-, S1-.
 * **sine_rw10_mode5_extended_16-16_2341**: S2+, S1-, S2-, S1+.
 
-pretraining used Datasets:
+### Pretraining used Datasets:
 * **sine_rw10_mode5_extended_6-6_1234**: S1+, S2+, S1-, S2-.
 * **sine_rw10_mode5_extended_6-6_1432**: S1+, S2-, S1-, S2+.
 * **sine_rw10_mode5_extended_6-6_2143**: S2+, S1+, S2-, S1-.
@@ -74,7 +74,7 @@ pretraining used Datasets:
   
 ---
 
-## Weather Data Stream
+### Weather Data Stream
 
 This dataset, provided by the Agricultural Research Service of the U.S. Department of Agriculture, offers real-world data ideal for studying temporal dependencies. It captures hydrometeorological variables recorded hourly from 2004 to 2014 in the Johnston Draw watershed, Idaho, USA. This region spans 1.8 square kilometers with a 372-meter elevation gradient.
 
@@ -93,8 +93,6 @@ The dataset includes the following features:
 ### Classification Functions
 The dataset uses three sets of boundary functions:
 
-**Short-Term Dynamics**:
-
 $$
 W1+: y(X_t) = 
 \begin{cases} 
@@ -111,7 +109,6 @@ W1-: y(X_t) =
 \end{cases}
 $$
 
-**Extended Temporal Dependencies**:
 
 $$
 W2+: y(X_t) = 
