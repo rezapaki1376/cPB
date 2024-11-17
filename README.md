@@ -172,9 +172,9 @@ This folder contains the Jupyter notebooks for running pre-trained models and ex
 * **Run-test-cGRU-Periodic-Anytime.ipynb**: In this file, there are executable codes and configs for the cGRU model in both the Periodic and the Anytime classifier scenario.
 
 ##### IMPORTANT: before running each model the config cell should be configured with our desired configs. The parameters of the models the input data and the pre-trained models should be defined.
-reza.paki@mail.polimi.it
+
 ## Contact:
-[https://github.com/AndreaCossu/ContinualLearning-SequentialProcessing](https://github.com/federicogiannini13/cpnn)
+reza.paki@mail.polimi.it
 ## Credits
 [https://github.com/AndreaCossu/ContinualLearning-SequentialProcessing](https://github.com/federicogiannini13/cpnn)
 
