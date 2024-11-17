@@ -158,7 +158,7 @@ pretraining used Datasets:
 ## 3) Project structure
 
 #### datasets
-This repository contains all the data streams used in this work which are explained in detail in [Section 2](##2)-Dataset-Description). 
+This repository contains all the data streams used in this work which are explained in detail in [Section 2](#2)-Dataset-Description). 
 #### utils
 It contains all the pre-required functions such as preprocessing, metrics calculation, etc.
 
