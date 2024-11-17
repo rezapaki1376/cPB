@@ -11,10 +11,8 @@ execute:
 
 `pip install -r requirements.txt`
 
-## 2) Project structure
+## 2) Dataset Description
 
-
-## Dataset Description
 
 This repository includes synthetic and real-world datasets designed for evaluating temporal dependencies and contextual complexities in machine learning models. Below is a comprehensive description of the datasets used.
 
@@ -157,6 +155,10 @@ Testing Datasets:
 pretraining used Datasets:
 * **weather_pretraining**: W3
 
+## 3) Project structure
+
+#### datasets
+This repository contains all the data streams used in this work which are explained in detail in Section 2[2) Dataset Description]. 
 #### utils
 It contains all the pre-required functions such as preprocessing, metrics calculation, etc.
 
