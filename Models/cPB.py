@@ -242,20 +242,21 @@ class cPB:
         -------
         None
         """
-        self.model = self.rebuild_model(mask_number)
-        x = np.array(x)
-        y = list(y)
-        x, y, _ = self._load_batch(x, y)
-        y_pred = self.model(x)
-        y_pred = get_samples_outputs(y_pred)
-        pred, _ = get_pred_from_outputs(y_pred)
-        kappa = cohen_kappa(y, pred).item()
-        acc = accuracy_score(np.array(y), np.array(pred))
-        self.acc_saving[mask_number].append(acc)
-        self.cohen_kappa_saving[mask_number].append(kappa)
-        if not mask_selection:
-            self.performance[f'task_{task_number}']['acc'].append(acc)
-            self.performance[f'task_{task_number}']['kappa'].append(kappa)
+        with torch.no_grad():
+            self.model = self.rebuild_model(mask_number)
+            x = np.array(x)
+            y = list(y)
+            x, y, _ = self._load_batch(x, y)
+            y_pred = self.model(x)
+            y_pred = get_samples_outputs(y_pred)
+            pred, _ = get_pred_from_outputs(y_pred)
+            kappa = cohen_kappa(y, pred).item()
+            acc = accuracy_score(np.array(y), np.array(pred))
+            self.acc_saving[mask_number].append(acc)
+            self.cohen_kappa_saving[mask_number].append(kappa)
+            if not mask_selection:
+                self.performance[f'task_{task_number}']['acc'].append(acc)
+                self.performance[f'task_{task_number}']['kappa'].append(kappa)
 
     def plotting(self):
         """
