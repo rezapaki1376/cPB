@@ -25,7 +25,6 @@ class cGRULinear(nn.Module):
         self.h0 = np.zeros((1, self.hidden_size))
         self.many_to_one = many_to_one
         self.remember_states = remember_states
-        self.many_to_one = many_to_one
 
         # LAYERS
         self.gru = nn.GRU(input_size, hidden_size, num_layers=1, batch_first=True)
@@ -39,15 +38,20 @@ class cGRULinear(nn.Module):
 
         if prev_h is not None:
             input_f = torch.cat((x, prev_h), dim=2)  # (B, L, I+H)
-        out_h, _ = self.gru(input_f, self._build_initial_state(x))
+        out_h, hn = self.gru(input_f, self._build_initial_state(x))
         if self.many_to_one:
             out = self.linear(out_h[:,-1,:])
         else:
             out = self.linear(out_h)
 
+        # if we want to save first hidden state
+        # if train and self.remember_states:
+        #     self.h0 = out_h[:, 1, :].detach().numpy()
+        # if we want to save last hidden state
         if train and self.remember_states:
-            self.h0 = out_h[:, 1, :].detach().numpy()
-
+            self.h0 = hn
+            # or can be written like below
+            # self.h0 = out_h[:, -1, :].detach().numpy()
         return out, out_h
 
     def _build_initial_state(self, x):
