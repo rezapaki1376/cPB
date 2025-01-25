@@ -32,7 +32,7 @@ class cGRULinear(nn.Module):
 
         self.to(self.device)
 
-    def forward(self, x, prev_h, train=False):
+    def forward(self, x, prev_h=None, train=False):
         input_f = x.to(self.device)
 
         if prev_h is not None:
