@@ -87,6 +87,7 @@ class ModifiedRNN(nn.Module):
         model_type='CPB',
         mask_option='SUM',
         low_rank=False,
+        weight_init = None
     ):
         super(ModifiedRNN, self).__init__()
 
@@ -157,6 +158,7 @@ class ModifiedRNN(nn.Module):
             mask_weights=mask_weights,
             mask_option=mask_option,
             low_rank=low_rank,
+            weight_init = weight_init
         )
 
     def forward(self, input):
