@@ -1,15 +1,9 @@
 import torch
 import numpy as np
-import warnings
+import pickle
 import torch.nn as nn
-import torch.nn.functional as F
-from torch.autograd import Variable
-from torch.nn.modules.utils import _pair
-from torch.nn.parameter import Parameter
 from Models.PiggyBack import *
 from Models.pretrain import *
-import pickle
-
 
 class ModifiedRNN(nn.Module):
     """
@@ -60,22 +54,13 @@ class ModifiedRNN(nn.Module):
         The sequence length for input data.
     mask_weights : list, default=[]
         The weights used for masking in the piggyback model.
-
-    Attributes
-    ----------
-    pretrain_model : nn.Module
-        The pretrained RNN model (GRU or LSTM).
-    classifier : nn.Module
-        The piggyback model that incorporates the masking mechanism.
-    all_weights : dict
-        The state dictionary of the pretrained model.
-
-    Methods
-    -------
-    forward(input)
-        Perform a forward pass through the classifier.
+    model_type : str, default='CPB'
+        Model type, either 'CPB' (continuous piggyback) or 'CSS' (continuous SupSup).
+    mask_option : str, default='SUM'
+        Mask combination method, either 'SUM' (sum of masks with weights) or 'DOT' (dot product of masks with weights).
+    low_rank : bool, default=True
+        Whether to break down masks into two full rank matrices.
     """
-
     def __init__(
         self,
         input_size=2,
@@ -84,7 +69,7 @@ class ModifiedRNN(nn.Module):
         hidden_size=50,
         output_size=2,
         batch_size=128,
-        base_model="GRU",
+        base_model="gru",
         many_to_one=False,
         remember_states=None,
         bias=True,
@@ -99,11 +84,10 @@ class ModifiedRNN(nn.Module):
         pretrain_model_addr="",
         seq_len=10,
         mask_weights=[],
+        model_type='CPB',
+        mask_option='SUM',
+        low_rank=False,
     ):
-        """
-        Initialize the ModifiedRNN model with support for pretrained GRU/LSTM models
-        and piggyback masking.
-        """
         super(ModifiedRNN, self).__init__()
 
         # PARAMETERS
@@ -120,9 +104,12 @@ class ModifiedRNN(nn.Module):
         self.seq_len = seq_len
         self.mask_weights = mask_weights
         self.base_model = base_model
+        self.model_type = model_type
+        self.mask_option = mask_option
+        self.low_rank = low_rank
 
         # Load pretrained model (GRU or LSTM)
-        if base_model == "GRU":
+        if base_model == "gru":
             self.pretrain_model = GRU_Model(
                 input_size=input_size,
                 device=torch.device("cpu"),
@@ -141,73 +128,40 @@ class ModifiedRNN(nn.Module):
                 batch_size=batch_size,
             )
 
-        # Load pretrained weights
         with open(self.pretrain_model_addr, "rb") as fp:
             self.pretrain_model.load_state_dict(pickle.load(fp), strict=False)
         self.all_weights = self.pretrain_model.state_dict()
 
         # Initialize the piggyback model
-        if base_model == "GRU":
-            self.classifier = PBGRU(
-                input_size=input_size,
-                device=device,
-                num_layers=num_layers,
-                hidden_size=hidden_size,
-                output_size=output_size,
-                batch_size=batch_size,
-                many_to_one=many_to_one,
-                remember_states=remember_states,
-                bias=bias,
-                training=training,
-                dropout=dropout,
-                bidirectional=bidirectional,
-                batch_first=batch_first,
-                mask_init=mask_init,
-                mask_scale=mask_scale,
-                threshold_fn=threshold_fn,
-                threshold=threshold,
-                all_weights=self.all_weights,
-                seq_len=seq_len,
-                mask_weights=mask_weights,
-            )
-        else:
-            self.classifier = PBLSTM(
-                input_size=input_size,
-                device=device,
-                num_layers=num_layers,
-                hidden_size=hidden_size,
-                output_size=output_size,
-                batch_size=batch_size,
-                many_to_one=many_to_one,
-                remember_states=remember_states,
-                bias=bias,
-                training=training,
-                dropout=dropout,
-                bidirectional=bidirectional,
-                batch_first=batch_first,
-                mask_init=mask_init,
-                mask_scale=mask_scale,
-                threshold_fn=threshold_fn,
-                threshold=threshold,
-                all_weights=self.all_weights,
-                seq_len=seq_len,
-                mask_weights=mask_weights,
-            )
+        classifier_class = PiggyBackGRU if base_model == 'gru' else PiggyBackLSTM
+        self.classifier = classifier_class(
+            input_size=input_size,
+            device=device,
+            num_layers=num_layers,
+            hidden_size=hidden_size,
+            output_size=output_size,
+            batch_size=batch_size,
+            many_to_one=many_to_one,
+            remember_states=remember_states,
+            bias=bias,
+            training=training,
+            dropout=dropout,
+            bidirectional=bidirectional,
+            batch_first=batch_first,
+            mask_init=mask_init,
+            mask_scale=mask_scale,
+            threshold_fn=threshold_fn,
+            threshold=threshold,
+            all_weights=self.all_weights,
+            seq_len=seq_len,
+            mask_weights=mask_weights,
+            mask_option=mask_option,
+            low_rank=low_rank,
+        )
 
     def forward(self, input):
         """
         Perform a forward pass through the classifier.
-
-        Parameters
-        ----------
-        input : torch.Tensor
-            The input tensor of shape (batch_size, seq_len, input_size).
-
-        Returns
-        -------
-        out : torch.Tensor
-            The output tensor of shape (batch_size, seq_len, output_size)
-            or (batch_size, 1, output_size) if many_to_one is True.
         """
         out = self.classifier(input)
         return out
