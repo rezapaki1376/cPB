@@ -120,7 +120,7 @@ class PBGRU(nn.Module):
         mask_option = 'SUM',
         low_rank = False,
         weight_init = None,
-        sample_wise = false
+        sample_wise = False
     ):
         super(PBGRU, self).__init__()
 

@@ -9,35 +9,40 @@ from torch.nn.modules.utils import _pair
 from torch.nn.parameter import Parameter
 from torch._VF import gru as _VF_gru
 from torch._VF import lstm as _VF_lstm
-
+from InitMask import *
+from InitWeights import *
 DEFAULT_THRESHOLD = 5e-3
+
 class Binarizer(torch.autograd.Function):
     """Binarizes {0, 1} a real valued tensor."""
 
     def __init__(self, threshold=DEFAULT_THRESHOLD):
-
+        """Initialize the binarizer with a threshold."""
         super(Binarizer, self).__init__()
         Binarizer.threshold = threshold
 
     def forward(self, inputs):
+        """Apply binarization based on the threshold."""
         outputs = inputs.clone()
         outputs[inputs.le(Binarizer.threshold)] = 0
         outputs[inputs.gt(Binarizer.threshold)] = 1
-        #print(outputs)
         return outputs
 
     def backward(self, gradOutput):
+        """Backward pass to propagate gradients."""
         return gradOutput
+
 
 class Ternarizer(torch.autograd.Function):
     """Ternarizes {-1, 0, 1} a real valued tensor."""
 
     def __init__(self, threshold=DEFAULT_THRESHOLD):
-
+        """Initialize the ternarizer with a threshold."""
         super(Ternarizer, self).__init__()
         Ternarizer.threshold = threshold
 
     def forward(self, inputs):
+        """Apply ternarization based on the threshold."""
         outputs = inputs.clone()
         outputs.fill_(0)
         outputs[inputs < 0] = -1
@@ -45,36 +50,139 @@ class Ternarizer(torch.autograd.Function):
         return outputs
 
     def backward(self, gradOutput):
+        """Backward pass to propagate gradients."""
         return gradOutput
 
 def GRUBlockMath(input, hn, weight_thresholded_ih, weight_thresholded_hh, bias_ih_l0,
-              bias_hh_l0, batch_size=None, bias=True, num_layers=1, dropout=0.0, training=False, bidirectional= False, batch_first=False):
+                 bias_hh_l0, batch_size=None, bias=True, num_layers=1, dropout=0.0,
+                 training=False, bidirectional=False, batch_first=False, sample_wise=False):
+    """
+    GRU block computation using thresholded weights and optional sample-wise processing.
 
-  tensors = [weight_thresholded_ih,
-             weight_thresholded_hh,
-             bias_ih_l0,
-             bias_hh_l0]
-  batch_size= None
-  if batch_size==None:
-    output, new_hn = _VF_gru(input, hn, tensors, bias, num_layers, dropout, training, bidirectional, batch_first )
-  else:
-    output, new_hn = _VF_gru(input, batch_size, hn, tensors, bias, num_layers, dropout, training, bidirectional )
-  return output, new_hn
+    Parameters
+    ----------
+    input : torch.Tensor
+        The input tensor of shape (batch_size, seq_len, input_size).
+    hn : torch.Tensor
+        The initial hidden state tensor.
+    weight_thresholded_ih : torch.Tensor
+        The input-hidden weight tensor after thresholding.
+    weight_thresholded_hh : torch.Tensor
+        The hidden-hidden weight tensor after thresholding.
+    bias_ih_l0 : torch.Tensor
+        The bias tensor for input-hidden weights.
+    bias_hh_l0 : torch.Tensor
+        The bias tensor for hidden-hidden weights.
+    batch_size : int, optional
+        The batch size of the input (default is None).
+    bias : bool, optional
+        Whether to use biases in the GRU computation (default is True).
+    num_layers : int, optional
+        Number of stacked GRU layers (default is 1).
+    dropout : float, optional
+        Dropout rate between GRU layers (default is 0.0).
+    training : bool, optional
+        Whether the model is in training mode (default is False).
+    bidirectional : bool, optional
+        Whether the GRU is bidirectional (default is False).
+    batch_first : bool, optional
+        Whether the input tensor has batch size as the first dimension (default is False).
+    sample_wise : bool, optional
+        Whether to process input samples sequentially, updating hidden states iteratively (default is False).
+
+    Returns
+    -------
+    output : torch.Tensor
+        The output tensor from the GRU layer.
+    new_hn : torch.Tensor
+        The updated hidden state tensor.
+    """
+    tensors = [weight_thresholded_ih, weight_thresholded_hh, bias_ih_l0, bias_hh_l0]
+
+    if batch_size is None:
+        output, new_hn = _VF_gru(input, hn, tensors, bias, num_layers, dropout, training,
+                                 bidirectional, batch_first)
+    elif sample_wise:
+        outputs = []
+        for i in range(input.size(0)):  # Process each sample independently
+            sample_output, hn = _VF_gru(input[i].unsqueeze(0), hn, tensors, bias, num_layers,
+                                        dropout, training, bidirectional, batch_first)
+            outputs.append(sample_output)
+        output = torch.cat(outputs, dim=0)  # Concatenate outputs to form the final tensor
+        new_hn = hn
+    else:
+        output, new_hn = _VF_gru(input, batch_size, hn, tensors, bias, num_layers, dropout,
+                                 training, bidirectional)
+
+    return output, new_hn
 
 def LSTMBlockMath(input, hn, weight_thresholded_ih, weight_thresholded_hh, bias_ih_l0,
-              bias_hh_l0, batch_size=None, bias=True, num_layers=1, dropout=0.0, training=False, bidirectional= False, batch_first=False):
+                  bias_hh_l0, batch_size=None, bias=True, num_layers=1, dropout=0.0,
+                  training=False, bidirectional=False, batch_first=False, sample_wise=False):
+    """
+    LSTM block computation using thresholded weights and optional sample-wise processing.
 
-  tensors = [weight_thresholded_ih,
-             weight_thresholded_hh,
-             bias_ih_l0,
-             bias_hh_l0]
-  batch_size= None
-  if batch_size==None:
-    results = _VF_lstm(input, hn, tensors, bias, num_layers, dropout, training, bidirectional, batch_first )
-  else:
-    results = _VF_lstm(input, batch_size, hn, tensors, bias, num_layers, dropout, training, bidirectional )
-  output=results[0]
-  return output
+    Parameters
+    ----------
+    input : torch.Tensor
+        The input tensor of shape (batch_size, seq_len, input_size).
+    hn : tuple of torch.Tensor
+        The initial hidden state (h, c) for the LSTM.
+    weight_thresholded_ih : torch.Tensor
+        The input-hidden weight tensor after thresholding.
+    weight_thresholded_hh : torch.Tensor
+        The hidden-hidden weight tensor after thresholding.
+    bias_ih_l0 : torch.Tensor
+        The bias tensor for input-hidden weights.
+    bias_hh_l0 : torch.Tensor
+        The bias tensor for hidden-hidden weights.
+    batch_size : int, optional
+        The batch size of the input (default is None).
+    bias : bool, optional
+        Whether to use biases in the LSTM computation (default is True).
+    num_layers : int, optional
+        Number of stacked LSTM layers (default is 1).
+    dropout : float, optional
+        Dropout rate between LSTM layers (default is 0.0).
+    training : bool, optional
+        Whether the model is in training mode (default is False).
+    bidirectional : bool, optional
+        Whether the LSTM is bidirectional (default is False).
+    batch_first : bool, optional
+        Whether the input tensor has batch size as the first dimension (default is False).
+    sample_wise : bool, optional
+        Whether to process input samples sequentially, updating hidden states iteratively (default is False).
+
+    Returns
+    -------
+    output : torch.Tensor
+        The output tensor from the LSTM layer.
+    hidden : tuple of torch.Tensor
+        The updated hidden state tensor (h, c).
+    """
+    tensors = [weight_thresholded_ih, weight_thresholded_hh, bias_ih_l0, bias_hh_l0]
+
+    if batch_size is None:
+        results = _VF_lstm(input, hn, tensors, bias, num_layers, dropout, training,
+                           bidirectional, batch_first)
+    elif sample_wise:
+        outputs = []
+        for i in range(input.size(0)):  # Process each sample independently
+            sample_result = _VF_lstm(input[i].unsqueeze(0), hn, tensors, bias, num_layers,
+                                     dropout, training, bidirectional, batch_first)
+            outputs.append(sample_result[0])  # Collecting output of each sample
+            hn = sample_result[1:]  # Update hidden state with the new one
+        output = torch.cat(outputs, dim=0)  # Concatenate outputs to form the final tensor
+        hidden = hn
+    else:
+        results = _VF_lstm(input, batch_size, hn, tensors, bias, num_layers, dropout,
+                           training, bidirectional)
+
+    # Extract output and hidden state
+    output = results[0]
+    hidden = results[1:]
+
+    return output, hidden
 
 class ElementWiseLSTM(nn.Module):
     """Modified linear layer."""
@@ -99,7 +207,12 @@ class ElementWiseLSTM(nn.Module):
       	threshold=None,
       	LSTM_weights=[],
         seq_len=10,
-        LSTM_mask_weights=[]
+        LSTM_mask_weights=[],
+        model_type = 'CPB',
+        mask_option = 'SUM',
+        low_rank = False,
+        weight_init = None,
+        sample_wise = False
     ):
         super(ElementWiseLSTM, self).__init__()
 
@@ -122,6 +235,11 @@ class ElementWiseLSTM(nn.Module):
         self.seq_len=seq_len,
         self.LSTM_mask_weights=LSTM_mask_weights
         self.many_to_one = many_to_one
+        self.remember_states = remember_states
+        self.low_rank = low_rank
+        self.weight_init = weight_init
+        self.mask_option = mask_option
+        self.sample_wise = sample_wise
 
 
         if threshold is None:
@@ -208,7 +326,7 @@ class ElementWiseLSTM(nn.Module):
 
         out = LSTMBlockMath(input, self.hx, weight_thresholded_ih, weight_thresholded_hh,
                                 weight_thresholded_bias_ih, weight_thresholded_bias_hh, self.batch_size, self.bias, self.num_layers, self.dropout,
-                                self.training, self.bidirectional, self.batch_first)
+                                self.training, self.bidirectional, self.batch_first, self.sample_wise)
         
         if self.many_to_one:
             out = out[:, -1, :]
@@ -270,7 +388,12 @@ class ElementWiseGRU(nn.Module):
       	threshold=None,
       	GRU_weights=[],
         seq_len=10,
-        GRU_mask_weights=[]
+        GRU_mask_weights=[],
+        model_type = 'CPB',
+        mask_option = 'SUM',
+        low_rank = False,
+        weight_init = None,
+        sample_wise = False
     ):
         super(ElementWiseGRU, self).__init__()
 
@@ -293,6 +416,11 @@ class ElementWiseGRU(nn.Module):
         self.seq_len=seq_len,
         self.GRU_mask_weights=GRU_mask_weights
         self.many_to_one = many_to_one
+        self.remember_states = remember_states
+        self.low_rank = low_rank
+        self.weight_init = weight_init
+        self.mask_option = mask_option
+        self.sample_wise = sample_wise
 
         self.h0 = np.zeros((1, self.hidden_size))
 
@@ -376,7 +504,7 @@ class ElementWiseGRU(nn.Module):
 
         out,_ = GRUBlockMath(input, self.hn, weight_thresholded_ih, weight_thresholded_hh,
                                 weight_thresholded_bias_ih, weight_thresholded_bias_hh, self.batch_size, self.bias, self.num_layers, self.dropout,
-                                self.training, self.bidirectional, self.batch_first)
+                                self.training, self.bidirectional, self.batch_first, self.sample_wise)
 
         if self.many_to_one:
             out = out[:, -1, :]
@@ -429,7 +557,11 @@ class ElementWiseLinear(nn.Module):
         threshold_fn='binarizer',
         threshold=None,
         linear_weights=[],
-        Linear_mask_weights=[]
+        Linear_mask_weights=[],
+        model_type = 'CPB',
+        mask_option = 'SUM',
+        low_rank = False,
+        weight_init = None,
         ):
         super(ElementWiseLinear, self).__init__()
         self.in_features = in_features
@@ -439,6 +571,10 @@ class ElementWiseLinear(nn.Module):
         self.mask_init = mask_init
         self.linear_weights=linear_weights
         self.Linear_mask_weights=Linear_mask_weights
+        self.model_type = model_type
+        self.mask_option = mask_option
+        self.low_rank = low_rank
+        self.weight_init = weight_init
         if threshold is None:
             threshold = DEFAULT_THRESHOLD
         self.info = {
