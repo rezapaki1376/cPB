@@ -185,34 +185,36 @@ def LSTMBlockMath(input, hn, weight_thresholded_ih, weight_thresholded_hh, bias_
     return output, hidden
 
 class ElementWiseLSTM(nn.Module):
-    """Modified linear layer."""
+    """Modified LSTM layer with mask-based pruning and optional low-rank approximation."""
+
     def __init__(
         self,
         input_size=2,
         device=torch.device("cpu"),
-      	num_layers=1,
+        num_layers=1,
         hidden_size=50,
         output_size=2,
         batch_size=128,
         many_to_one=False,
-        remember_states = None,
+        remember_states=None,
         bias=True,
         dropout=0.0,
         training=False,
         bidirectional=False,
         batch_first=True,
-        mask_init='uniform',
+        mask_init="uniform",
         mask_scale=1e-2,
-        threshold_fn='binarizer',
-      	threshold=None,
-      	LSTM_weights=[],
+        threshold_fn="binarizer",
+        threshold=None,
+        LSTM_weights=[],
         seq_len=10,
         LSTM_mask_weights=[],
-        model_type = 'CPB',
-        mask_option = 'SUM',
-        low_rank = False,
-        weight_init = None,
-        sample_wise = False
+        model_type="CPB",
+        mask_option="SUM",
+        low_rank=False,  # Enable low-rank decomposition
+        rank_dim=10,  # Rank for low-rank approximation
+        weight_init=None,
+        sample_wise=False,
     ):
         super(ElementWiseLSTM, self).__init__()
 
@@ -222,118 +224,129 @@ class ElementWiseLSTM(nn.Module):
         self.output_size = output_size
         self.batch_size = batch_size
         self.device = torch.device(device)
-        self.bias=bias
-        self.dropout=dropout
-        self.training=training
-        self.bidirectional=bidirectional
-        self.batch_first=batch_first
+        self.bias = bias
+        self.dropout = dropout
+        self.training = training
+        self.bidirectional = bidirectional
+        self.batch_first = batch_first
         self.mask_init = mask_init
         self.mask_scale = mask_scale
         self.threshold_fn = threshold_fn
-        self.threshold=threshold
-        self.LSTM_weights=LSTM_weights
-        self.seq_len=seq_len,
-        self.LSTM_mask_weights=LSTM_mask_weights
+        self.threshold = threshold
+        self.LSTM_weights = LSTM_weights
+        self.seq_len = seq_len
+        self.LSTM_mask_weights = LSTM_mask_weights
         self.many_to_one = many_to_one
         self.remember_states = remember_states
         self.low_rank = low_rank
+        self.rank_dim = rank_dim  # Rank dimension for low-rank decomposition
         self.weight_init = weight_init
         self.mask_option = mask_option
         self.sample_wise = sample_wise
 
-
         if threshold is None:
-            threshold = DEFAULT_THRESHOLD
+            threshold = 5e-3  # Default threshold
+
         self.info = {
-            'threshold_fn': threshold_fn,
-            'threshold': threshold,
+            "threshold_fn": threshold_fn,
+            "threshold": threshold,
         }
 
-        self.weight_ih = Variable(torch.Tensor(
-            4*hidden_size, input_size), requires_grad=False)
-        self.weight_hh = Variable(torch.Tensor(
-            4*hidden_size, hidden_size), requires_grad=False)
+        # Initialize weight tensors
+        self.weight_ih = Variable(torch.Tensor(4 * hidden_size, input_size), requires_grad=False)
+        self.weight_hh = Variable(torch.Tensor(4 * hidden_size, hidden_size), requires_grad=False)
+        self.bias_ih_l0 = Variable(torch.Tensor(4 * hidden_size), requires_grad=False)
+        self.bias_hh_l0 = Variable(torch.Tensor(4 * hidden_size), requires_grad=False)
 
-        self.bias_ih_l0 = Variable(torch.Tensor(
-            4*hidden_size), requires_grad=False)
-        self.bias_hh_l0 = Variable(torch.Tensor(
-            4*hidden_size), requires_grad=False)
+        # Assign LSTM weights
+        self.weight_ih = LSTM_weights[0]
+        self.weight_hh = LSTM_weights[1]
+        self.bias_ih_l0 = LSTM_weights[2]
+        self.bias_hh_l0 = LSTM_weights[3]
 
-        self.weight_ih=LSTM_weights[0]
-        self.weight_hh=LSTM_weights[1]
-        self.bias_ih_l0=LSTM_weights[2]
-        self.bias_hh_l0=LSTM_weights[3]
+        # Low-rank decomposition for masks
+        if low_rank:
+            self.mask_H_ih = Parameter(torch.randn(4 * hidden_size, rank_dim) * mask_scale)
+            self.mask_V_ih = Parameter(torch.randn(rank_dim, input_size) * mask_scale)
 
-        self.mask_real_weight_ih = self.weight_ih.data.new(self.weight_ih.size())
-        self.mask_real_weight_hh = self.weight_hh.data.new(self.weight_hh.size())
-        self.mask_real_bias_ih = self.weight_ih.data.new(self.bias_ih_l0.size())
-        self.mask_real_bias_hh = self.weight_hh.data.new(self.bias_hh_l0.size())
-        self.h0 = np.zeros((1, self.hidden_size))
-        self.c0 = np.zeros((1, self.hidden_size))
-        if mask_init == '1s':
-            self.mask_real_weight_ih.fill_(mask_scale)
-            self.mask_real_weight_hh.fill_(mask_scale)
-            self.mask_real_bias_ih.fill_(mask_scale)
-            self.mask_real_bias_hh.fill_(mask_scale)
-        elif mask_init == 'uniform':
-            self.mask_real_weight_ih.uniform_(-1 * mask_scale, mask_scale)
-            self.mask_real_weight_hh.uniform_(-1 * mask_scale, mask_scale)
-            self.mask_real_bias_ih.uniform_(-1 * mask_scale, mask_scale)
-            self.mask_real_bias_hh.uniform_(-1 * mask_scale, mask_scale)
-        if LSTM_mask_weights!=[]:
-            self.mask_real_weight_ih = Parameter(self.LSTM_mask_weights[0])
-            self.mask_real_weight_hh = Parameter(self.LSTM_mask_weights[1])
-            self.mask_real_bias_ih = Parameter(self.LSTM_mask_weights[2])
-            self.mask_real_bias_hh = Parameter(self.LSTM_mask_weights[3])
-
+            self.mask_H_hh = Parameter(torch.randn(4 * hidden_size, rank_dim) * mask_scale)
+            self.mask_V_hh = Parameter(torch.randn(rank_dim, hidden_size) * mask_scale)
         else:
-            self.mask_real_weight_ih = Parameter(self.mask_real_weight_ih)
-            self.mask_real_weight_hh = Parameter(self.mask_real_weight_hh)
-            self.mask_real_bias_ih = Parameter(self.mask_real_bias_ih)
-            self.mask_real_bias_hh = Parameter(self.mask_real_bias_hh)
+            self.mask_real_weight_ih = self.weight_ih.data.new(self.weight_ih.size())
+            self.mask_real_weight_hh = self.weight_hh.data.new(self.weight_hh.size())
+            self.mask_real_bias_ih = self.weight_ih.data.new(self.bias_ih_l0.size())
+            self.mask_real_bias_hh = self.weight_hh.data.new(self.bias_hh_l0.size())
 
+            if mask_init == "1s":
+                self.mask_real_weight_ih.fill_(mask_scale)
+                self.mask_real_weight_hh.fill_(mask_scale)
+                self.mask_real_bias_ih.fill_(mask_scale)
+                self.mask_real_bias_hh.fill_(mask_scale)
+            elif mask_init == "uniform":
+                self.mask_real_weight_ih.uniform_(-1 * mask_scale, mask_scale)
+                self.mask_real_weight_hh.uniform_(-1 * mask_scale, mask_scale)
+                self.mask_real_bias_ih.uniform_(-1 * mask_scale, mask_scale)
+                self.mask_real_bias_hh.uniform_(-1 * mask_scale, mask_scale)
 
-        if threshold_fn == 'binarizer':
+            if LSTM_mask_weights != []:
+                self.mask_real_weight_ih = Parameter(self.LSTM_mask_weights[0])
+                self.mask_real_weight_hh = Parameter(self.LSTM_mask_weights[1])
+                self.mask_real_bias_ih = Parameter(self.LSTM_mask_weights[2])
+                self.mask_real_bias_hh = Parameter(self.LSTM_mask_weights[3])
+            else:
+                self.mask_real_weight_ih = Parameter(self.mask_real_weight_ih)
+                self.mask_real_weight_hh = Parameter(self.mask_real_weight_hh)
+                self.mask_real_bias_ih = Parameter(self.mask_real_bias_ih)
+                self.mask_real_bias_hh = Parameter(self.mask_real_bias_hh)
+
+        if threshold_fn == "binarizer":
             self.threshold_fn = Binarizer(threshold=threshold)
-        elif threshold_fn == 'ternarizer':
+        elif threshold_fn == "ternarizer":
             self.threshold_fn = Ternarizer(threshold=threshold)
 
-    def forward(self,input):
-        if torch.isnan(self.mask_real_weight_ih).any():
-            if self.mask_init == 'uniform':
-                self.mask_real_weight_ih.uniform_(-1 * self.mask_scale, self.mask_scale)
-                self.mask_real_weight_hh.uniform_(-1 * self.mask_scale, self.mask_scale)
-            elif self.mask_init == '1s':
-                self.mask_real_weight_ih.fill_(self.mask_scale)
-                self.mask_real_weight_hh.fill_(self.mask_scale)
+    def forward(self, input):
+        if self.low_rank:
+            # Compute low-rank mask
+            mask_real_weight_ih = torch.matmul(self.mask_H_ih, self.mask_V_ih)
+            mask_real_weight_hh = torch.matmul(self.mask_H_hh, self.mask_V_hh)
+        else:
+            mask_real_weight_ih = self.mask_real_weight_ih
+            mask_real_weight_hh = self.mask_real_weight_hh
 
-            self.mask_real_weight_ih = Parameter(self.mask_real_weight_ih)
-            self.mask_real_weight_hh = Parameter(self.mask_real_weight_hh)
+        if self.mask_option == "SUM":
+            # Sum-based mask application
+            weight_summed_ih = self.weight_ih + mask_real_weight_ih
+            weight_summed_hh = self.weight_hh + mask_real_weight_hh
+            weight_summed_bias_ih = self.bias_ih_l0 + self.mask_real_bias_ih
+            weight_summed_bias_hh = self.bias_hh_l0 + self.mask_real_bias_hh
+        else:
+            # Threshold-based mask application
+            mask_thresholded_ih = self.threshold_fn.apply(mask_real_weight_ih)
+            mask_thresholded_hh = self.threshold_fn.apply(mask_real_weight_hh)
+            mask_thresholded_bias_ih = self.threshold_fn.apply(self.mask_real_bias_ih)
+            mask_thresholded_bias_hh = self.threshold_fn.apply(self.mask_real_bias_hh)
 
+            # Apply masks
+            weight_summed_ih = mask_thresholded_ih * self.weight_ih
+            weight_summed_hh = mask_thresholded_hh * self.weight_hh
+            weight_summed_bias_ih = mask_thresholded_bias_ih * self.bias_ih_l0
+            weight_summed_bias_hh = mask_thresholded_bias_hh * self.bias_hh_l0
 
-        mask_thresholded_ih = self.threshold_fn.apply(self.mask_real_weight_ih)
-        mask_thresholded_hh = self.threshold_fn.apply(self.mask_real_weight_hh)
-        mask_thresholded_bias_ih = self.threshold_fn.apply(self.mask_real_bias_ih)
-        mask_thresholded_bias_hh = self.threshold_fn.apply(self.mask_real_bias_hh)
-        self.hn=self._build_initial_state(input, self.h0)
-        self.cn=self._build_initial_state(input, self.c0)
-        self.hx=(self.hn,self.cn)
+        self.hn = self._build_initial_state(input, np.zeros((1, self.hidden_size)))
+        self.cn = self._build_initial_state(input, np.zeros((1, self.hidden_size)))
+        self.hx = (self.hn, self.cn)
 
-        weight_thresholded_ih = mask_thresholded_ih * self.weight_ih
-        weight_thresholded_hh = mask_thresholded_hh * self.weight_hh
-        weight_thresholded_bias_ih = mask_thresholded_bias_ih * self.bias_ih_l0
-        weight_thresholded_bias_hh = mask_thresholded_bias_hh * self.bias_hh_l0
+        out = LSTMBlockMath(
+            input, self.hx, weight_summed_ih, weight_summed_hh,
+            weight_summed_bias_ih, weight_summed_bias_hh, self.batch_size, self.bias,
+            self.num_layers, self.dropout, self.training, self.bidirectional,
+            self.batch_first, self.sample_wise
+        )
 
-        out = LSTMBlockMath(input, self.hx, weight_thresholded_ih, weight_thresholded_hh,
-                                weight_thresholded_bias_ih, weight_thresholded_bias_hh, self.batch_size, self.bias, self.num_layers, self.dropout,
-                                self.training, self.bidirectional, self.batch_first, self.sample_wise)
-        
         if self.many_to_one:
             out = out[:, -1, :]
-        else:
-            out = out
-
         return out
+    
     def _build_initial_state(self, x, state):
         s = torch.from_numpy(np.tile(state, (1, x.size()[0], 1))).float()
         s.requires_grad = True
