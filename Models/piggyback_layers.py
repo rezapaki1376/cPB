@@ -550,82 +550,97 @@ class ElementWiseGRU(nn.Module):
 
 
 class ElementWiseLinear(nn.Module):
-    """Modified linear layer."""
-
+    """Modified linear layer with mask-based pruning and optional low-rank approximation."""
+    
     def __init__(
         self,
         in_features,
         out_features,
         bias=True,
-        mask_init='uniform',
+        mask_init="uniform",
         mask_scale=1e-2,
-        threshold_fn='binarizer',
+        threshold_fn="binarizer",
         threshold=None,
         linear_weights=[],
         Linear_mask_weights=[],
-        model_type = 'CPB',
-        mask_option = 'SUM',
-        low_rank = False,
-        weight_init = None,
-        ):
+        model_type="CPB",
+        mask_option="SUM",
+        low_rank=False,  # Enable low-rank decomposition
+        rank_dim=10,  # Rank for low-rank approximation
+        weight_init=None
+    ):
         super(ElementWiseLinear, self).__init__()
+        
         self.in_features = in_features
         self.out_features = out_features
         self.threshold_fn = threshold_fn
         self.mask_scale = mask_scale
         self.mask_init = mask_init
-        self.linear_weights=linear_weights
-        self.Linear_mask_weights=Linear_mask_weights
+        self.linear_weights = linear_weights
+        self.Linear_mask_weights = Linear_mask_weights
         self.model_type = model_type
         self.mask_option = mask_option
         self.low_rank = low_rank
+        self.rank_dim = rank_dim  # Rank dimension for low-rank decomposition
         self.weight_init = weight_init
+
         if threshold is None:
-            threshold = DEFAULT_THRESHOLD
+            threshold = 5e-3  # Default threshold
+        
         self.info = {
-            'threshold_fn': threshold_fn,
-            'threshold': threshold,
+            "threshold_fn": threshold_fn,
+            "threshold": threshold,
         }
 
-
-        self.weight = Variable(torch.Tensor(
-            out_features, in_features), requires_grad=False)
+        self.weight = Variable(torch.Tensor(out_features, in_features), requires_grad=False)
         if bias:
-            self.bias = Variable(torch.Tensor(
-                out_features), requires_grad=False)
+            self.bias = Variable(torch.Tensor(out_features), requires_grad=False)
         else:
-            self.register_parameter('bias', None)
-        self.weight=linear_weights[0]
-        self.bias=linear_weights[1]
+            self.register_parameter("bias", None)
+        
+        self.weight = linear_weights[0]
+        self.bias = linear_weights[1]
 
-        self.mask_real_linear = self.weight.data.new(self.weight.size())
-        if mask_init == '1s':
-            self.mask_real_linear.fill_(mask_scale)
-        elif mask_init == 'uniform':
-            self.mask_real_linear.uniform_(-1 * mask_scale, mask_scale)
-
-        if Linear_mask_weights!=[]:
-            self.mask_real_linear = Parameter(self.Linear_mask_weights)
+        if low_rank:
+            # Initialize low-rank matrices
+            self.mask_H = Parameter(torch.randn(out_features, rank_dim) * mask_scale)
+            self.mask_V = Parameter(torch.randn(rank_dim, in_features) * mask_scale)
         else:
-            self.mask_real_linear = Parameter(self.mask_real_linear)
+            self.mask_real_linear = self.weight.data.new(self.weight.size())
+            if mask_init == "1s":
+                self.mask_real_linear.fill_(mask_scale)
+            elif mask_init == "uniform":
+                self.mask_real_linear.uniform_(-1 * mask_scale, mask_scale)
 
-        if threshold_fn == 'binarizer':
+            if Linear_mask_weights != []:
+                self.mask_real_linear = Parameter(self.Linear_mask_weights)
+            else:
+                self.mask_real_linear = Parameter(self.mask_real_linear)
+
+        if threshold_fn == "binarizer":
             self.threshold_fn = Binarizer(threshold=threshold)
-        elif threshold_fn == 'ternarizer':
+        elif threshold_fn == "ternarizer":
             self.threshold_fn = Ternarizer(threshold=threshold)
 
     def forward(self, input):
+        if self.low_rank:
+            # Compute low-rank mask
+            mask_real_linear = torch.matmul(self.mask_H, self.mask_V)
+        else:
+            mask_real_linear = self.mask_real_linear
 
-        mask_thresholded = self.threshold_fn.apply(self.mask_real_linear)
-
-        weight_thresholded = mask_thresholded * self.weight
-
-        return F.linear(input, weight_thresholded, self.bias)
+        if self.mask_option == "SUM":
+            # Sum-based mask application
+            weight_summed = self.weight + mask_real_linear
+            return F.linear(input, weight_summed, self.bias)
+        else:
+            # Threshold-based mask application
+            mask_thresholded = self.threshold_fn.apply(mask_real_linear)
+            weight_thresholded = mask_thresholded * self.weight
+            return F.linear(input, weight_thresholded, self.bias)
 
     def __repr__(self):
-        return self.__class__.__name__ + '(' \
-            + 'in_features=' + str(self.in_features) \
-            + ', out_features=' + str(self.out_features) + ')'
+        return f"{self.__class__.__name__}(in_features={self.in_features}, out_features={self.out_features})"
 
     def _apply(self, fn):
         for module in self.children():
@@ -633,8 +648,6 @@ class ElementWiseLinear(nn.Module):
 
         for param in self._parameters.values():
             if param is not None:
-                # Variables stored in modules are graph leaves, and we don't
-                # want to create copy nodes, so we have to unpack the data.
                 param.data = fn(param.data)
                 if param._grad is not None:
                     param._grad.data = fn(param._grad.data)
@@ -644,4 +657,5 @@ class ElementWiseLinear(nn.Module):
                 self._buffers[key] = fn(buf)
 
         self.weight.data = fn(self.weight.data)
-        self.bias.data = fn(self.bias.data)
+        if self.bias is not None:
+            self.bias.data = fn(self.bias.data)
