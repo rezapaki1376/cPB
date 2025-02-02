@@ -22,13 +22,11 @@ import matplotlib.pyplot as plt
 
 class cPB:
     """
-    Class that implements the cPNN (Custom Piggyback Neural Network) structure for task-specific learning
-    with weight-sharing and mask-based adaptation.
+    Class implementing a continual learning framework using Custom Piggyback Neural Networks (cPNN) 
+    with weight-sharing, mask-based adaptation, and handling of concept drift.
 
     Parameters
     ----------
-    model_class : class, default=PBGRU
-        The base model class used in the network (e.g., PBGRU or PBLSTM).
     hidden_size : int, default=50
         Number of hidden units in the model.
     device : torch.device or None, default=None
@@ -53,54 +51,81 @@ class cPB:
         Number of epochs for training each task.
     input_size : int, default=2
         Number of input features.
+    model_type : str, default='CPB'
+        Model type, either 'CPB' (Continuous Piggyback) or 'CSS' (Continuous SupSup).
+    mask_option : str, default='SUM'
+        How masks are applied, either 'SUM' (sum of masks with weights) or 'DOT' (dot product).
+    low_rank : bool, default=False
+        Whether to apply low-rank factorization to mask matrices.
     **kwargs : dict
         Additional parameters for model initialization.
 
     Attributes
     ----------
     model : ModifiedRNN
-        The neural network model for handling task-specific weights and masks.
+        The neural network model with piggyback masking.
     loss_fn : torch.nn.CrossEntropyLoss
-        Loss function used during training.
+        Loss function used for training.
     weights_list : list
-        List of task-specific weights for the model.
+        Stores masks corresponding to different data drifts.
+    selected_mask_index : list
+        Indexes of the best-performing masks during training.
     performance : dict
-        Dictionary to store metrics (accuracy and Cohen Kappa) for each task.
+        Stores metrics (accuracy, Cohen Kappa) per task.
+    all_models_weight : list
+        Stores model weights over different drifts.
+    concept_drift_masks : list
+        Stores masks saved at each concept drift point.
     """
 
-    def __init__(self, model_class=PBGRU, hidden_size=50, device=None, stride=1, lr=0.01,
+    def __init__(self, hidden_size=50, device=None, stride=1, lr=0.01,
                  seq_len=5, base_model='GRU', pretrain_model_addr='', mask_weights=[],
-                 mask_init='uniform', number_of_tasks=4, epoch_size=10, input_size=2, **kwargs):
+                 mask_init='uniform', number_of_tasks=4, epoch_size=10, batch_first=True, input_size=2,
+                 model_type='CPB', mask_option='SUM', low_rank=False, **kwargs):
         """
-        Initializes the cPB class with parameters for task-specific weight-sharing and mask handling.
+        Initializes the continual learning framework with piggyback masking and concept drift handling.
         """
         self.loss_fn = torch.nn.CrossEntropyLoss(reduction="mean")
         self.stride = stride
         self.seq_len = seq_len
         self.lr = lr
         self.hidden_size = hidden_size
+        self.device = device
         self.base_model = base_model
         self.pretrain_model_addr = pretrain_model_addr
         self.mask_init = mask_init
-        self.weights_list = []
-        self.selected_mask_index = []
+        self.model_type = model_type
+        self.mask_option = mask_option
+        self.low_rank = low_rank
+        self.weights_list = []  # Stores masks from different concept drifts
+        self.selected_mask_index = []  # Stores best-performing mask index after 50 batches
         self.epoch_size = epoch_size
         self.input_size = input_size
+        self.batch_first = batch_first
         self.all_batch_acc = [[] for _ in range(number_of_tasks)]
         self.all_batch_kappa = [[] for _ in range(number_of_tasks)]
         self.acc_saving = [[]]
         self.cohen_kappa_saving = [[]]
-        self.all_models_weight = []
+        self.all_models_weight = []  # Stores weights over time
         self.performance = dict()
+        self.concept_drift_masks = []  # Stores masks at each drift point
 
-        # Initialize the model with pretrained weights if available
+        # Initialize the model using pretrained weights if available
         if pretrain_model_addr != '':
             self.model = ModifiedRNN(pretrain_model_addr=pretrain_model_addr,
                                      hidden_size=self.hidden_size, base_model=base_model,
                                      seq_len=seq_len, mask_weights=mask_weights,
-                                     mask_init=mask_init, input_size=self.input_size)
+                                     mask_init=mask_init, input_size=self.input_size,
+                                     batch_first = self.batch_first, model_type = self.model_type, 
+                                     mask_option = self.mask_option, low_rank = self.low_rank)
             self.initial_weights = self.model.state_dict()
-        self.all_models_weight.append([])
+        
+        self.all_models_weight.append([])  # Store the initial model weights
+        self.final_weights=[]
+
+        # At first concept drift, save the mask and reinitialize
+        self.current_mask = None
+
 
     def get_seq_len(self):
         """
@@ -190,6 +215,10 @@ class cPB:
             optimizer.step()
         self.update_weights(task_number)
 
+
+    def update_weights(self,task_number):
+      self.weights_list[task_number]=copy.deepcopy(self.model.state_dict())
+      
     def rebuild_model(self, task_number):
         """
         Rebuilds the model for a specific task using the corresponding weights.
@@ -204,23 +233,64 @@ class cPB:
         model : ModifiedRNN
             The rebuilt model with task-specific weights.
         """
+        task_weights = copy.deepcopy(self.weights_list[task_number])
+        # mask_weights = [
+        # task_weights[-5],  # Extracting from the last 5 elements
+        # task_weights[-4],
+        # task_weights[-3],
+        # task_weights[-2],
+        # task_weights[-1],
+        # ]
         param_list = []
         for params in self.weights_list[task_number]:
             param_list.append(params)
 
+        # print('param_list',param_list)
+        # print(task_weights)
         mask_weights = [
-            self.weights_list[task_number][param_list[-5]],
-            self.weights_list[task_number][param_list[-4]],
-            self.weights_list[task_number][param_list[-3]],
-            self.weights_list[task_number][param_list[-2]],
-            self.weights_list[task_number][param_list[-1]],
+            task_weights[param_list[-5]],
+            task_weights[param_list[-4]],
+            task_weights[param_list[-3]],
+            task_weights[param_list[-2]],
+            task_weights[param_list[-1]],
         ]
         self.model = ModifiedRNN(pretrain_model_addr=self.pretrain_model_addr,
                                  hidden_size=self.hidden_size, base_model=self.base_model,
                                  seq_len=self.seq_len, mask_weights=mask_weights,
-                                 mask_init=self.mask_init, input_size=self.input_size)
+                                 mask_init=self.mask_init, input_size=self.input_size,
+                                 batch_first= self.batch_first, model_type = self.model_type, 
+                                     mask_option = self.mask_option, low_rank = self.low_rank)
+    
         return self.model
+    def _load_batch(self, x: np.array, y: np.array = None):
+        """
+        It transforms the batch in order to be inputted to cPNN, by building the different sequences and
+        converting them to tensors.
 
+        Parameters
+        ----------
+        x: numpy.array
+            The features values of the batch.
+        y: list, default: None.
+            The target values of the batch. If None only features will be loaded.
+        Returns
+        -------
+        x: torch.Tensor
+            The features values of the created sequences. It has shape: (batch_size - seq_len + 1, seq_len, n_features)
+        y: torch.Tensor
+            The target values of the samples in the batc. It has length: batch_size. If y is None it returns None.
+        y_seq: torch.Tensor
+            The target values of the created sequences. It has shape: (batch_size - seq_len + 1, seq_len). If y is None it returns None.
+        """
+        batch = self._convert_to_tensor_dataset(x, y)
+        batch_loader = DataLoader(
+            batch, batch_size = batch.tensors[0].size()[0], drop_last=False
+        )
+        y_seq = None
+        for x, y_seq in batch_loader:  # only to take x and y from loader
+            break
+        y = torch.tensor(y)
+        return x, y, y_seq
     def predict_many(self, x, y, mask_number, task_number, mask_selection=False):
         """
         Makes predictions for a batch of data for a specific task.
@@ -258,6 +328,55 @@ class cPB:
                 self.performance[f'task_{task_number}']['acc'].append(acc)
                 self.performance[f'task_{task_number}']['kappa'].append(kappa)
 
+    def add_new_column(self,task_number):
+      avg_acc= np.mean(self.acc_saving, axis=1)
+      avg_cohen_kappa = np.mean(self.cohen_kappa_saving, axis=1)
+      index_of_best_acc = np.argmax(avg_cohen_kappa)
+      self.selected_mask_index.append(index_of_best_acc)
+
+      self.performance[f'task_{task_number}']['acc']=self.acc_saving[index_of_best_acc]
+      self.performance[f'task_{task_number}']['kappa']=self.cohen_kappa_saving[index_of_best_acc]
+
+      print('list of accuracies that used for evaluating and selecting the models = ',avg_acc)
+      print('list of kappa values that used for evaluating and selecting the models = ',avg_cohen_kappa)
+      print('index of selcted mask for this task',index_of_best_acc)
+      return index_of_best_acc
+  
+    def save_final_metrics(self,task,best_mask_index):
+      self.all_batch_acc[task-1] = copy.deepcopy(self.acc_saving[best_mask_index])
+      self.all_batch_kappa[task-1] = copy.deepcopy(self.cohen_kappa_saving[best_mask_index])
+      print('All batches Accuracy= ', np.mean(self.all_batch_acc[task-1]))
+      print('All batches cohen kappa= ', np.mean(self.all_batch_kappa[task-1]))
+      self.acc_saving = [[] for _ in range(task+1)]
+      self.cohen_kappa_saving = [[] for _ in range(task+1)]
+      
+      
+    def final_weights_saving(self):
+      self.final_weights.append(copy.deepcopy(self.model.state_dict()))
+      self.all_models_weight.append([])
+      mask_weights=copy.deepcopy(self.model.state_dict())
+      param_list=[]
+      for params in mask_weights:
+        param_list.append(params)
+      mask_weights=[
+          (param_list[-5],mask_weights[param_list[-5]]),
+          (param_list[-4],mask_weights[param_list[-4]]),
+          (param_list[-3],mask_weights[param_list[-3]]),
+          (param_list[-2],mask_weights[param_list[-2]]),
+          (param_list[-1],mask_weights[param_list[-1]]),
+      ]
+      self.all_models_weight[-1]=[mask_weights]
+      
+    def weights_copy(self, task_number):
+      self.weights_list = []
+      for i in range(0,task_number-1):
+        self.weights_list.append(copy.deepcopy(self.final_weights[i]))
+      self.weights_list.append(copy.deepcopy(self.initial_weights))
+
+      self.performance[f'task_{task_number}']={}
+      self.performance[f'task_{task_number}']['acc']=[]
+      self.performance[f'task_{task_number}']['kappa']=[]
+      
     def plotting(self):
         """
         Plots the cumulative accuracy and Cohen Kappa for all tasks.
