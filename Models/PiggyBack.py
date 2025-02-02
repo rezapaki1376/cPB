@@ -41,7 +41,7 @@ class PBGRU(nn.Module):
         Whether the model is in training mode.
     bidirectional : bool, default = False
         Whether the GRU layers are bidirectional.
-    batch_first : bool, default = False
+    batch_first : bool, default = True
         Whether the input tensors have batch size as the first dimension.
     mask_init : str, default = 'uniform'
         The initialization method for piggyback masks.
@@ -108,7 +108,7 @@ class PBGRU(nn.Module):
         dropout = 0.0,
         training = False,
         bidirectional = False,
-        batch_first = False,
+        batch_first = True,
         mask_init = "uniform",
         mask_scale = 1e-2,
         threshold_fn = "binarizer",
@@ -254,7 +254,7 @@ class PBLSTM(nn.Module):
         Whether the model is in training mode.
     bidirectional : bool, default = False
         Whether the LSTM layers are bidirectional.
-    batch_first : bool, default = False
+    batch_first : bool, default = True
         Whether the input tensors have batch size as the first dimension.
     mask_init : str, default = 'uniform'
         The initialization method for piggyback masks.
@@ -308,7 +308,7 @@ class PBLSTM(nn.Module):
         dropout = 0.0,
         training = False,
         bidirectional = False,
-        batch_first = False,
+        batch_first = True,
         mask_init = "uniform",
         mask_scale = 1e-2,
         threshold_fn = "binarizer",

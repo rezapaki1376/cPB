@@ -24,7 +24,7 @@ class ModifiedRNN(nn.Module):
         The number of output features.
     batch_size : int, default=128
         The number of samples per batch.
-    base_model : str, default='gru'
+    base_model : str, default='GRU'
         The base RNN type, either 'gru' or 'lstm'.
     many_to_one : bool, default=False
         Whether the model predicts only the last output (many-to-one).
@@ -38,7 +38,7 @@ class ModifiedRNN(nn.Module):
         Whether the model is in training mode.
     bidirectional : bool, default=False
         Whether the RNN layers are bidirectional.
-    batch_first : bool, default=False
+    batch_first : bool, default=True
         Whether the input tensors have batch size as the first dimension.
     mask_init : str, default='uniform'
         The initialization method for piggyback masks.
@@ -69,14 +69,14 @@ class ModifiedRNN(nn.Module):
         hidden_size=50,
         output_size=2,
         batch_size=128,
-        base_model="gru",
+        base_model="GRU",
         many_to_one=False,
         remember_states=None,
         bias=True,
         dropout=0.0,
         training=False,
         bidirectional=False,
-        batch_first=False,
+        batch_first=True,
         mask_init="uniform",
         mask_scale=1e-2,
         threshold_fn="binarizer",
@@ -110,7 +110,7 @@ class ModifiedRNN(nn.Module):
         self.low_rank = low_rank
 
         # Load pretrained model (GRU or LSTM)
-        if base_model == "gru":
+        if base_model == "GRU":
             self.pretrain_model = GRU_Model(
                 input_size=input_size,
                 device=torch.device("cpu"),
@@ -134,7 +134,7 @@ class ModifiedRNN(nn.Module):
         self.all_weights = self.pretrain_model.state_dict()
 
         # Initialize the piggyback model
-        classifier_class = PiggyBackGRU if base_model == 'gru' else PiggyBackLSTM
+        classifier_class = PBGRU if base_model == 'GRU' else PBLSTM
         self.classifier = classifier_class(
             input_size=input_size,
             device=device,

@@ -133,7 +133,10 @@ class GRU_Model(nn.Module):
             # or can be written like below
             # self.h0 = out_h[:, -1, :].detach().numpy()
         return out, out_h
-
+    def _build_initial_state(self, x):
+        s = torch.from_numpy(np.tile(self.h0, (1, x.size()[0], 1))).float()
+        s.requires_grad = True
+        return s.to(self.device)
 
 class LSTM_Model(nn.Module):
     """
