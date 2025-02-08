@@ -389,7 +389,7 @@ class ElementWiseGRU(nn.Module):
         GRU_weights=[],
         seq_len=10,
         GRU_mask_weights=[],
-        model_type="CPB",
+        model_type="cPB",
         mask_option="SUM",
         low_rank=False,  # Enable low-rank decomposition
         rank_dim=10,  # Rank for low-rank approximation
@@ -578,7 +578,7 @@ class ElementWiseLinear(nn.Module):
         threshold=None,
         linear_weights=[],
         Linear_mask_weights=[],
-        model_type="CPB",
+        model_type="cPB",
         mask_option="DOT",
         low_rank=False,  # Enable low-rank decomposition
         rank_dim=10,  # Rank for low-rank approximation

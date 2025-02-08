@@ -10,7 +10,7 @@ This fine is for initialization of the models' weight
 import math
 import torch
 import torch.nn as nn
-from models.args import args
+# from models.args import args
 
 
 def signed_constant(module):

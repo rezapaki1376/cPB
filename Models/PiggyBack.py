@@ -57,8 +57,8 @@ class PBGRU(nn.Module):
         The sequence length for input data.
     mask_weights : list, default = []
         The weights used for masking in the piggyback model.
-    model_type : str, default='CPB'
-        Model type, either 'CPB' (continuous piggyback) or 'CSS' (continuous SupSup).
+    model_type : str, default='cPB'
+        Model type, either 'cPB' (continuous piggyback) or 'cSS' (continuous SupSup).
     mask_option : str, default='SUM'
         Mask combination method, either 'SUM' (sum of masks with weights) or 'DOT' (dot product of masks with weights).
     low_rank : bool, default=False
@@ -116,7 +116,7 @@ class PBGRU(nn.Module):
         all_weights = [],
         seq_len = 10,
         mask_weights = [],
-        model_type = 'CPB',
+        model_type = 'cPB',
         mask_option = 'SUM',
         low_rank = False,
         weight_init = None,
@@ -270,8 +270,8 @@ class PBLSTM(nn.Module):
         The sequence length for input data.
     mask_weights : list, default = []
         The weights used for masking in the piggyback model.
-    model_type : str, default='CPB'
-        Model type, either 'CPB' (continuous piggyback) or 'CSS' (continuous SupSup).
+    model_type : str, default='cPB'
+        Model type, either 'cPB' (continuous piggyback) or 'cSS' (continuous SupSup).
     mask_option : str, default='SUM'
         Mask combination method, either 'SUM' (sum of masks with weights) or 'DOT' (dot product of masks with weights).
     low_rank : bool, default=False
@@ -316,7 +316,7 @@ class PBLSTM(nn.Module):
         all_weights = [],
         seq_len = 10,
         mask_weights = [],
-        model_type = 'CPB',
+        model_type = 'cPB',
         mask_option = 'SUM',
         low_rank = False,
         weight_init = None,

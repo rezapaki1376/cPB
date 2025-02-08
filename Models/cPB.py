@@ -51,8 +51,8 @@ class cPB:
         Number of epochs for training each task.
     input_size : int, default=2
         Number of input features.
-    model_type : str, default='CPB'
-        Model type, either 'CPB' (Continuous Piggyback) or 'CSS' (Continuous SupSup).
+    model_type : str, default='cPB'
+        Model type, either 'cPB' (Continuous Piggyback) or 'cSS' (Continuous SupSup).
     mask_option : str, default='SUM'
         How masks are applied, either 'SUM' (sum of masks with weights) or 'DOT' (dot product).
     low_rank : bool, default=False
@@ -81,7 +81,7 @@ class cPB:
     def __init__(self, hidden_size=50, device=None, stride=1, lr=0.01,
                  seq_len=5, base_model='GRU', pretrain_model_addr='', mask_weights=[],
                  mask_init='uniform', number_of_tasks=4, epoch_size=10, batch_first=True, input_size=2,
-                 model_type='CPB', mask_option='SUM', low_rank=False, **kwargs):
+                 model_type='cPB', mask_option='SUM', low_rank=False, **kwargs):
         """
         Initializes the continual learning framework with piggyback masking and concept drift handling.
         """
@@ -121,6 +121,19 @@ class cPB:
             self.initial_weights = self.model.state_dict()
         
         self.all_models_weight.append([])  # Store the initial model weights
+        
+        param_list=[]
+        for params in self.initial_weights:
+            param_list.append(params)
+        self.all_models_weight[-1]=[
+          (param_list[0],self.initial_weights[param_list[0]]),
+          (param_list[1],self.initial_weights[param_list[1]]),
+          (param_list[2],self.initial_weights[param_list[2]]),
+          (param_list[3],self.initial_weights[param_list[3]]),
+          (param_list[4],self.initial_weights[param_list[4]]),
+          (param_list[5],self.initial_weights[param_list[5]]),
+          ]
+        
         self.final_weights=[]
 
         # At first concept drift, save the mask and reinitialize
