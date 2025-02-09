@@ -104,8 +104,10 @@ class cPB:
         self.batch_first = batch_first
         self.all_batch_acc = [[] for _ in range(number_of_tasks)]
         self.all_batch_kappa = [[] for _ in range(number_of_tasks)]
+        self.all_batch_predictions = [[] for _ in range(number_of_tasks)]
         self.acc_saving = [[]]
         self.cohen_kappa_saving = [[]]
+        self.predictions_saving = [[]]
         self.all_models_weight = []  # Stores weights over time
         self.performance = dict()
         self.concept_drift_masks = []  # Stores masks at each drift point
@@ -337,9 +339,11 @@ class cPB:
             acc = accuracy_score(np.array(y), np.array(pred))
             self.acc_saving[mask_number].append(acc)
             self.cohen_kappa_saving[mask_number].append(kappa)
+            self.predictions_saving[mask_number].append(pred)
             if not mask_selection:
                 self.performance[f'task_{task_number}']['acc'].append(acc)
                 self.performance[f'task_{task_number}']['kappa'].append(kappa)
+                self.performance[f'task_{task_number}']['predictions'].append(pred)
 
     def add_new_column(self,task_number):
       avg_acc= np.mean(self.acc_saving, axis=1)
@@ -349,6 +353,7 @@ class cPB:
 
       self.performance[f'task_{task_number}']['acc']=self.acc_saving[index_of_best_acc]
       self.performance[f'task_{task_number}']['kappa']=self.cohen_kappa_saving[index_of_best_acc]
+      self.performance[f'task_{task_number}']['predictions']=self.predictions_saving[index_of_best_acc]
 
       print('list of accuracies that used for evaluating and selecting the models = ',avg_acc)
       print('list of kappa values that used for evaluating and selecting the models = ',avg_cohen_kappa)
@@ -358,10 +363,12 @@ class cPB:
     def save_final_metrics(self,task,best_mask_index):
       self.all_batch_acc[task-1] = copy.deepcopy(self.acc_saving[best_mask_index])
       self.all_batch_kappa[task-1] = copy.deepcopy(self.cohen_kappa_saving[best_mask_index])
+      self.all_batch_predictions[task-1] = copy.deepcopy(self.predictions_saving[best_mask_index])
       print('All batches Accuracy= ', np.mean(self.all_batch_acc[task-1]))
       print('All batches cohen kappa= ', np.mean(self.all_batch_kappa[task-1]))
       self.acc_saving = [[] for _ in range(task+1)]
       self.cohen_kappa_saving = [[] for _ in range(task+1)]
+      self.predictions_saving = [[] for _ in range(task+1)]
       
       
     def final_weights_saving(self):
@@ -389,6 +396,7 @@ class cPB:
       self.performance[f'task_{task_number}']={}
       self.performance[f'task_{task_number}']['acc']=[]
       self.performance[f'task_{task_number}']['kappa']=[]
+      self.performance[f'task_{task_number}']['predictions']=[]
       
     def plotting(self):
         """
