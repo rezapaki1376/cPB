@@ -2,6 +2,7 @@ import torch
 import numpy as np
 from sklearn.metrics import accuracy_score, cohen_kappa_score
 import warnings
+from river import metrics
 from utils.utils import (
     customized_loss,
     accuracy,
@@ -81,7 +82,7 @@ class cPB:
     def __init__(self, hidden_size=50, device=None, stride=1, lr=0.01,
                  seq_len=5, base_model='GRU', pretrain_model_addr='', mask_weights=[],
                  mask_init='uniform', number_of_tasks=4, epoch_size=10, batch_first=True, input_size=2,
-                 model_type='cPB', mask_option='SUM', low_rank=False, **kwargs):
+                 model_type='cPB', mask_option='SUM', low_rank=False, many_to_one = False, **kwargs):
         """
         Initializes the continual learning framework with piggyback masking and concept drift handling.
         """
@@ -97,6 +98,7 @@ class cPB:
         self.model_type = model_type
         self.mask_option = mask_option
         self.low_rank = low_rank
+        self.many_to_one = many_to_one
         self.weights_list = []  # Stores masks from different concept drifts
         self.selected_mask_index = []  # Stores best-performing mask index after 50 batches
         self.epoch_size = epoch_size
@@ -105,6 +107,17 @@ class cPB:
         self.all_batch_acc = [[] for _ in range(number_of_tasks)]
         self.all_batch_kappa = [[] for _ in range(number_of_tasks)]
         self.all_batch_predictions = [[] for _ in range(number_of_tasks)]
+        
+        self.all_anytime_acc = [[metrics.Accuracy()] for _ in range(number_of_tasks)]
+        self.all_anytime_kappa = [[metrics.CohenKappa()] for _ in range(number_of_tasks)]
+        self.all_anytime_predictions = [[] for _ in range(number_of_tasks)]
+        
+        
+        self.acc_saving_anytime = [[metrics.Accuracy()]]
+        self.cohen_kappa_saving_anytime = [[metrics.CohenKappa()]]
+        self.predictions_saving_anytime = [[]]
+        self.performance_anytime = dict()
+        
         self.acc_saving = [[]]
         self.cohen_kappa_saving = [[]]
         self.predictions_saving = [[]]
@@ -220,11 +233,38 @@ class cPB:
         x = np.array(x)
         y = list(y)
         optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
-        x, y, _ = self._load_batch(x, y)
+        x, y, _ = self._load_batch(x, y)        
         for _ in range(self.epoch_size):
             optimizer.zero_grad()
             y_pred = self.model(x)
             y_pred = get_samples_outputs(y_pred)
+            loss = self.loss_fn(y_pred, y)
+            loss.backward(retain_graph=True)
+            optimizer.step()
+        self.update_weights(task_number)
+        
+    def learn_many_anytime(self, x, y, task_number):
+        """
+        Trains the model on a batch of data for a specific task.
+
+        Parameters
+        ----------
+        x : numpy.ndarray
+            Input features.
+        y : numpy.ndarray
+            Labels corresponding to the input features.
+        task_number : int
+            Index of the task to train on.
+        """
+        self.model = self.rebuild_model(task_number)
+        x = np.array(x)
+        y = list(y)
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
+        x, y, _ = self._load_batch(x, y)        
+        for _ in range(self.epoch_size):
+            optimizer.zero_grad()
+            y_pred = self.model(x)[:, -1, :]
+            loss = self.loss_fn(y_pred, y[self.seq_len-1:])
             loss = self.loss_fn(y_pred, y)
             loss.backward(retain_graph=True)
             optimizer.step()
@@ -274,7 +314,8 @@ class cPB:
                                  seq_len=self.seq_len, mask_weights=mask_weights,
                                  mask_init=self.mask_init, input_size=self.input_size,
                                  batch_first= self.batch_first, model_type = self.model_type, 
-                                     mask_option = self.mask_option, low_rank = self.low_rank)
+                                     mask_option = self.mask_option, low_rank = self.low_rank,
+                                     many_to_one = self.many_to_one)
     
         return self.model
     def _load_batch(self, x: np.array, y: np.array = None):
@@ -306,6 +347,113 @@ class cPB:
             break
         y = torch.tensor(y)
         return x, y, y_seq
+    
+    
+    # def predict_one(self, x: np.array, previous_data_points: np.array = None):
+    #     """
+    #     Predicts on a single data point while maintaining sequence-based inference.
+
+    #     Parameters
+    #     ----------
+    #     x : numpy.ndarray
+    #         Input data point (1D array).
+    #     previous_data_points : numpy.ndarray, optional
+    #         Previous sequence data for inference.
+
+    #     Returns
+    #     -------
+    #     None or Predicted value
+    #         Returns the predicted value if enough data points exist.
+    #     """
+    #     x = np.array(x).reshape(1, -1)
+
+    #     # Update previous data points storage
+    #     if previous_data_points is not None:
+    #         self.previous_data_points_anytime_inference = previous_data_points
+
+    #     if self.previous_data_points_anytime_inference is None:
+    #         self.previous_data_points_anytime_inference = x
+    #         for i, model in enumerate(self.ensemble):
+    #             self.predictions[i].append([0])  # Placeholder
+    #         return None
+
+    #     if len(self.previous_data_points_anytime_inference) != self.seq_len - 1:
+    #         self.previous_data_points_anytime_inference = np.concatenate(
+    #             [self.previous_data_points_anytime_inference, x]
+    #         )
+    #         for i, model in enumerate(self.ensemble):
+    #             self.predictions[i].append([0])  # Placeholder
+    #         return None
+
+    #     self.previous_data_points_anytime_inference = np.concatenate(
+    #         [self.previous_data_points_anytime_inference, x]
+    #     )
+
+    #     # Convert to tensor dataset
+    #     x_tensor = self._convert_to_tensor_dataset(self.previous_data_points_anytime_inference)
+
+    #     # Shift previous data for the next prediction
+    #     self.previous_data_points_anytime_inference = (
+    #         self.previous_data_points_anytime_inference[1:]
+    #     )
+
+    #     # Predict using all models in the ensemble
+    #     for i, model in enumerate(self.ensemble):
+    #         with torch.no_grad():
+    #             self.loss_on_seq = True
+    #             if not self.loss_on_seq:
+    #                 pred, _ = get_pred_from_outputs(self.ensemble[i](x_tensor)[0])
+    #             else:
+    #                 pred, _ = get_pred_from_outputs(self.ensemble[i](x_tensor))
+
+    #         self.predictions[i].append(pred)
+
+    #     return self.predictions[0][-1]  # Assuming the first model's prediction is used
+    
+    def predict_one(self, x, y, mask_number, task_number, mask_selection=False):
+        """
+        Makes predictions for a batch of data for a specific task.
+
+        Parameters
+        ----------
+        x : numpy.ndarray
+            Input features.
+        y : numpy.ndarray
+            Labels corresponding to the input features.
+        mask_number : int
+            Index of the mask to use for predictions.
+        task_number : int
+            Index of the task to predict on.
+        mask_selection : bool, default=False
+            Whether to use mask selection.
+
+        Returns
+        -------
+        None
+        """
+        with torch.no_grad():
+            self.model = self.rebuild_model(mask_number)
+            x = np.array(x)
+            y = list(y)
+            x, y, _ = self._load_batch(x, y)
+            y_pred = self.model(x)
+            # print(y_pred)
+            y_pred = y_pred[:, -1, :]
+            # print(y_pred)
+            pred, _ = get_pred_from_outputs(y_pred)
+            # print(pred)
+            if mask_selection:
+                # print(pred[-1])
+                # print(y[-1])
+                self.acc_saving_anytime[mask_number][0].update(int(pred[-1]),int(y[-1]))
+                self.cohen_kappa_saving_anytime[mask_number][0].update(int(pred[-1]),int(y[-1]))
+                self.predictions_saving_anytime[mask_number].append(pred)
+            elif not mask_selection:
+                # self.performance_anytime[f'task_{task_number}']['acc'].append(acc)
+                # self.performance_anytime[f'task_{task_number}']['kappa'].append(kappa)
+                self.performance_anytime[f'task_{task_number}']['predictions'].append(pred)
+
+    
     def predict_many(self, x, y, mask_number, task_number, mask_selection=False):
         """
         Makes predictions for a batch of data for a specific task.
@@ -337,10 +485,11 @@ class cPB:
             pred, _ = get_pred_from_outputs(y_pred)
             kappa = cohen_kappa(y, pred).item()
             acc = accuracy_score(np.array(y), np.array(pred))
-            self.acc_saving[mask_number].append(acc)
-            self.cohen_kappa_saving[mask_number].append(kappa)
-            self.predictions_saving[mask_number].append(pred)
-            if not mask_selection:
+            if mask_selection:
+                self.acc_saving[mask_number].append(acc)
+                self.cohen_kappa_saving[mask_number].append(kappa)
+                self.predictions_saving[mask_number].append(pred)
+            elif not mask_selection:
                 self.performance[f'task_{task_number}']['acc'].append(acc)
                 self.performance[f'task_{task_number}']['kappa'].append(kappa)
                 self.performance[f'task_{task_number}']['predictions'].append(pred)
@@ -360,15 +509,42 @@ class cPB:
       print('index of selcted mask for this task',index_of_best_acc)
       return index_of_best_acc
   
-    def save_final_metrics(self,task,best_mask_index):
-      self.all_batch_acc[task-1] = copy.deepcopy(self.acc_saving[best_mask_index])
-      self.all_batch_kappa[task-1] = copy.deepcopy(self.cohen_kappa_saving[best_mask_index])
-      self.all_batch_predictions[task-1] = copy.deepcopy(self.predictions_saving[best_mask_index])
-      print('All batches Accuracy= ', np.mean(self.all_batch_acc[task-1]))
-      print('All batches cohen kappa= ', np.mean(self.all_batch_kappa[task-1]))
-      self.acc_saving = [[] for _ in range(task+1)]
-      self.cohen_kappa_saving = [[] for _ in range(task+1)]
-      self.predictions_saving = [[] for _ in range(task+1)]
+    def add_new_column_anytime(self, task_number):
+      index_of_best_acc = np.argmax([self.cohen_kappa_saving_anytime[i][0].get() for i in range(len(self.cohen_kappa_saving_anytime))])
+      self.selected_mask_index.append(index_of_best_acc)
+      self.performance_anytime[f'task_{task_number}']['predictions']=self.predictions_saving_anytime[index_of_best_acc]
+      print('list of accuracies that used for evaluating and selecting the models = ',self.acc_saving_anytime)
+      print('list of kappa values that used for evaluating and selecting the models = ',self.cohen_kappa_saving_anytime)
+      print('index of selcted mask for this task',index_of_best_acc)
+      return index_of_best_acc
+  
+    def save_final_metrics(self,task, best_mask_index):
+        self.all_batch_acc[task-1] = copy.deepcopy(self.acc_saving[best_mask_index])
+        self.all_batch_kappa[task-1] = copy.deepcopy(self.cohen_kappa_saving[best_mask_index])
+        self.all_batch_predictions[task-1] = copy.deepcopy(self.predictions_saving[best_mask_index])
+        print('All batches Accuracy= ', np.mean(self.all_batch_acc[task-1]))
+        print('All batches cohen kappa= ', np.mean(self.all_batch_kappa[task-1]))
+        self.acc_saving = [[] for _ in range(task+1)]
+        self.cohen_kappa_saving = [[] for _ in range(task+1)]
+        self.predictions_saving = [[] for _ in range(task+1)]
+      
+    def save_final_metrics_anytime(self,task,y):
+        self.performance_anytime[f'task_{task}']['predictions'] = [None] * (self.seq_len-1) + self.performance_anytime[f'task_{task}']['predictions']
+        acc = metrics.Accuracy()
+        ck = metrics.CohenKappa()
+        for i in range(len(y)):
+            try:
+                self.performance_anytime[f'task_{task}']['acc'].append(copy.deepcopy(acc.update(int(self.performance_anytime[f'task_{task}']['predictions'][i]),int(y[i]))))
+                self.performance_anytime[f'task_{task}']['kappa'].append(copy.deepcopy(ck.update(int(self.performance_anytime[f'task_{task}']['predictions'][i]),int(y[i]))))
+            except:
+                self.performance_anytime[f'task_{task}']['acc'].append(copy.deepcopy(acc.update(self.performance_anytime[f'task_{task}']['predictions'][i],int(y[i]))))
+                self.performance_anytime[f'task_{task}']['kappa'].append(copy.deepcopy(ck.update(self.performance_anytime[f'task_{task}']['predictions'][i],int(y[i]))))
+
+        print('All points Accuracy= ', self.performance_anytime[f'task_{task}']['acc'][-1])
+        print('All points cohen kappa= ', self.performance_anytime[f'task_{task}']['kappa'][-1])
+        self.acc_saving_anytime = [[metrics.Accuracy()] for _ in range(task+1)]
+        self.cohen_kappa_saving_anytime = [[metrics.CohenKappa()] for _ in range(task+1)]
+        self.predictions_saving_anytime = [[] for _ in range(task+1)]
       
       
     def final_weights_saving(self):
@@ -397,6 +573,17 @@ class cPB:
       self.performance[f'task_{task_number}']['acc']=[]
       self.performance[f'task_{task_number}']['kappa']=[]
       self.performance[f'task_{task_number}']['predictions']=[]
+      
+    def weights_copy_anytime(self, task_number):
+      self.weights_list = []
+      for i in range(0,task_number-1):
+        self.weights_list.append(copy.deepcopy(self.final_weights[i]))
+      self.weights_list.append(copy.deepcopy(self.initial_weights))
+
+      self.performance_anytime[f'task_{task_number}']={}
+      self.performance_anytime[f'task_{task_number}']['acc']=[]
+      self.performance_anytime[f'task_{task_number}']['kappa']=[]
+      self.performance_anytime[f'task_{task_number}']['predictions']=[]
       
     def plotting(self):
         """
