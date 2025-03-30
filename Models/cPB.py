@@ -263,9 +263,13 @@ class cPB:
         x, y, _ = self._load_batch(x, y)        
         for _ in range(self.epoch_size):
             optimizer.zero_grad()
-            y_pred = self.model(x)[:, -1, :]
-            loss = self.loss_fn(y_pred, y[self.seq_len-1:])
-            loss = self.loss_fn(y_pred, y)
+            y_pred = self.model(x)
+            try:
+                loss = self.loss_fn(y_pred, y[self.seq_len - 1:])
+            except:
+                loss = self.loss_fn(y_pred, y[self.seq_len - 1:])
+            # loss = self.loss_fn(y_pred, y[self.seq_len-1:])
+            # loss = self.loss_fn(y_pred, y)
             loss.backward(retain_graph=True)
             optimizer.step()
         self.update_weights(task_number)
@@ -438,7 +442,8 @@ class cPB:
             x, y, _ = self._load_batch(x, y)
             y_pred = self.model(x)
             # print(y_pred)
-            y_pred = y_pred[:, -1, :]
+            # y_pred = y_pred[:, -1, :]
+            y_pred = y_pred
             # print(y_pred)
             pred, _ = get_pred_from_outputs(y_pred)
             # print(pred)
@@ -447,11 +452,11 @@ class cPB:
                 # print(y[-1])
                 self.acc_saving_anytime[mask_number][0].update(int(pred[-1]),int(y[-1]))
                 self.cohen_kappa_saving_anytime[mask_number][0].update(int(pred[-1]),int(y[-1]))
-                self.predictions_saving_anytime[mask_number].append(pred)
+                self.predictions_saving_anytime[mask_number].append(pred.item())
             elif not mask_selection:
                 # self.performance_anytime[f'task_{task_number}']['acc'].append(acc)
                 # self.performance_anytime[f'task_{task_number}']['kappa'].append(kappa)
-                self.performance_anytime[f'task_{task_number}']['predictions'].append(pred)
+                self.performance_anytime[f'task_{task_number}']['predictions'].append(pred.item())
 
     
     def predict_many(self, x, y, mask_number, task_number, mask_selection=False):
@@ -534,11 +539,17 @@ class cPB:
         ck = metrics.CohenKappa()
         for i in range(len(y)):
             try:
-                self.performance_anytime[f'task_{task}']['acc'].append(copy.deepcopy(acc.update(int(self.performance_anytime[f'task_{task}']['predictions'][i]),int(y[i]))))
-                self.performance_anytime[f'task_{task}']['kappa'].append(copy.deepcopy(ck.update(int(self.performance_anytime[f'task_{task}']['predictions'][i]),int(y[i]))))
+                self.performance_anytime[f'task_{task}']['acc'].append((copy.deepcopy(acc.update(int(self.performance_anytime[f'task_{task}']['predictions'][i]),int(y[i])))).get())
+                self.performance_anytime[f'task_{task}']['kappa'].append((copy.deepcopy(ck.update(int(self.performance_anytime[f'task_{task}']['predictions'][i]),int(y[i])))).get())
             except:
-                self.performance_anytime[f'task_{task}']['acc'].append(copy.deepcopy(acc.update(self.performance_anytime[f'task_{task}']['predictions'][i],int(y[i]))))
-                self.performance_anytime[f'task_{task}']['kappa'].append(copy.deepcopy(ck.update(self.performance_anytime[f'task_{task}']['predictions'][i],int(y[i]))))
+                self.performance_anytime[f'task_{task}']['acc'].append((copy.deepcopy(acc.update(self.performance_anytime[f'task_{task}']['predictions'][i],int(y[i])))).get())
+                self.performance_anytime[f'task_{task}']['kappa'].append((copy.deepcopy(ck.update(self.performance_anytime[f'task_{task}']['predictions'][i],int(y[i])))).get())
+            # try:
+            #     self.performance_anytime[f'task_{task}']['acc'].append(copy.deepcopy(acc.update(int(self.performance_anytime[f'task_{task}']['predictions'][i]),int(y[i]))))
+            #     self.performance_anytime[f'task_{task}']['kappa'].append(copy.deepcopy(ck.update(int(self.performance_anytime[f'task_{task}']['predictions'][i]),int(y[i]))))
+            # except:
+            #     self.performance_anytime[f'task_{task}']['acc'].append(copy.deepcopy(acc.update(self.performance_anytime[f'task_{task}']['predictions'][i],int(y[i]))))
+            #     self.performance_anytime[f'task_{task}']['kappa'].append(copy.deepcopy(ck.update(self.performance_anytime[f'task_{task}']['predictions'][i],int(y[i]))))
 
         print('All points Accuracy= ', self.performance_anytime[f'task_{task}']['acc'][-1])
         print('All points cohen kappa= ', self.performance_anytime[f'task_{task}']['kappa'][-1])
