@@ -189,13 +189,20 @@ class cPB_SML:
               outputs = model(x)
 
               if not self.loss_on_seq:
+                  print('not self.loss_on_seq:')
                   outputs = get_samples_outputs(outputs)
+                  
+              print(outputs.shape)
+              print(y)
+              
+              
               loss = self.loss_fn(outputs, y)
               optimizer = torch.optim.Adam(model.parameters(), lr=self.lr)
               optimizer.zero_grad()
               loss.backward(retain_graph=True)
               optimizer.step()
               self.ensemble[i]=model
+              print(ggggg)
 
     def get_seq_len(self):
         return self.seq_len
