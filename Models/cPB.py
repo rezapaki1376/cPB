@@ -293,19 +293,10 @@ class cPB:
             The rebuilt model with task-specific weights.
         """
         task_weights = copy.deepcopy(self.weights_list[task_number])
-        # mask_weights = [
-        # task_weights[-5],  # Extracting from the last 5 elements
-        # task_weights[-4],
-        # task_weights[-3],
-        # task_weights[-2],
-        # task_weights[-1],
-        # ]
+
         param_list = []
         for params in self.weights_list[task_number]:
             param_list.append(params)
-
-        # print('param_list',param_list)
-        # print(task_weights)
         mask_weights = [
             task_weights[param_list[-5]],
             task_weights[param_list[-4]],
@@ -353,67 +344,6 @@ class cPB:
         return x, y, y_seq
     
     
-    # def predict_one(self, x: np.array, previous_data_points: np.array = None):
-    #     """
-    #     Predicts on a single data point while maintaining sequence-based inference.
-
-    #     Parameters
-    #     ----------
-    #     x : numpy.ndarray
-    #         Input data point (1D array).
-    #     previous_data_points : numpy.ndarray, optional
-    #         Previous sequence data for inference.
-
-    #     Returns
-    #     -------
-    #     None or Predicted value
-    #         Returns the predicted value if enough data points exist.
-    #     """
-    #     x = np.array(x).reshape(1, -1)
-
-    #     # Update previous data points storage
-    #     if previous_data_points is not None:
-    #         self.previous_data_points_anytime_inference = previous_data_points
-
-    #     if self.previous_data_points_anytime_inference is None:
-    #         self.previous_data_points_anytime_inference = x
-    #         for i, model in enumerate(self.ensemble):
-    #             self.predictions[i].append([0])  # Placeholder
-    #         return None
-
-    #     if len(self.previous_data_points_anytime_inference) != self.seq_len - 1:
-    #         self.previous_data_points_anytime_inference = np.concatenate(
-    #             [self.previous_data_points_anytime_inference, x]
-    #         )
-    #         for i, model in enumerate(self.ensemble):
-    #             self.predictions[i].append([0])  # Placeholder
-    #         return None
-
-    #     self.previous_data_points_anytime_inference = np.concatenate(
-    #         [self.previous_data_points_anytime_inference, x]
-    #     )
-
-    #     # Convert to tensor dataset
-    #     x_tensor = self._convert_to_tensor_dataset(self.previous_data_points_anytime_inference)
-
-    #     # Shift previous data for the next prediction
-    #     self.previous_data_points_anytime_inference = (
-    #         self.previous_data_points_anytime_inference[1:]
-    #     )
-
-    #     # Predict using all models in the ensemble
-    #     for i, model in enumerate(self.ensemble):
-    #         with torch.no_grad():
-    #             self.loss_on_seq = True
-    #             if not self.loss_on_seq:
-    #                 pred, _ = get_pred_from_outputs(self.ensemble[i](x_tensor)[0])
-    #             else:
-    #                 pred, _ = get_pred_from_outputs(self.ensemble[i](x_tensor))
-
-    #         self.predictions[i].append(pred)
-
-    #     return self.predictions[0][-1]  # Assuming the first model's prediction is used
-    
     def predict_one(self, x, y, mask_number, task_number, mask_selection=False):
         """
         Makes predictions for a batch of data for a specific task.
@@ -441,21 +371,14 @@ class cPB:
             y = list(y)
             x, y, _ = self._load_batch(x, y)
             y_pred = self.model(x)
-            # print(y_pred)
-            # y_pred = y_pred[:, -1, :]
             y_pred = y_pred
-            # print(y_pred)
             pred, _ = get_pred_from_outputs(y_pred)
-            # print(pred)
             if mask_selection:
-                # print(pred[-1])
-                # print(y[-1])
+
                 self.acc_saving_anytime[mask_number][0].update(int(pred[-1]),int(y[-1]))
                 self.cohen_kappa_saving_anytime[mask_number][0].update(int(pred[-1]),int(y[-1]))
                 self.predictions_saving_anytime[mask_number].append(pred.item())
             elif not mask_selection:
-                # self.performance_anytime[f'task_{task_number}']['acc'].append(acc)
-                # self.performance_anytime[f'task_{task_number}']['kappa'].append(kappa)
                 self.performance_anytime[f'task_{task_number}']['predictions'].append(pred.item())
 
     
@@ -544,12 +467,6 @@ class cPB:
             except:
                 self.performance_anytime[f'task_{task}']['acc'].append((copy.deepcopy(acc.update(self.performance_anytime[f'task_{task}']['predictions'][i],int(y[i])))).get())
                 self.performance_anytime[f'task_{task}']['kappa'].append((copy.deepcopy(ck.update(self.performance_anytime[f'task_{task}']['predictions'][i],int(y[i])))).get())
-            # try:
-            #     self.performance_anytime[f'task_{task}']['acc'].append(copy.deepcopy(acc.update(int(self.performance_anytime[f'task_{task}']['predictions'][i]),int(y[i]))))
-            #     self.performance_anytime[f'task_{task}']['kappa'].append(copy.deepcopy(ck.update(int(self.performance_anytime[f'task_{task}']['predictions'][i]),int(y[i]))))
-            # except:
-            #     self.performance_anytime[f'task_{task}']['acc'].append(copy.deepcopy(acc.update(self.performance_anytime[f'task_{task}']['predictions'][i],int(y[i]))))
-            #     self.performance_anytime[f'task_{task}']['kappa'].append(copy.deepcopy(ck.update(self.performance_anytime[f'task_{task}']['predictions'][i],int(y[i]))))
 
         print('All points Accuracy= ', self.performance_anytime[f'task_{task}']['acc'][-1])
         print('All points cohen kappa= ', self.performance_anytime[f'task_{task}']['kappa'][-1])

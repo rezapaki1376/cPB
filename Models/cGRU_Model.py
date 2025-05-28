@@ -13,7 +13,7 @@ from utils.utils import (
 import torch.utils.data as data_utils
 from torch.utils.data import DataLoader
 import copy
-from Models.pretrain import GRU_Model  # Import the GRU model
+# from Models.pretrain import GRU_Model  # Import the GRU model
 import matplotlib.pyplot as plt
 import pickle
 class cGRU:
@@ -107,12 +107,15 @@ class cGRU:
         x = np.array(x)
         y = list(y)
         optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
-        x, y, _ = self._load_batch(x, y)        
+        x, y, _ = self._load_batch(x, y)  
+        
         for _ in range(self.epoch_size):
             optimizer.zero_grad()
             y_pred,_ = self.model(x)
-            loss = self.loss_fn(y_pred[:, -1, :], y[self.seq_len-1:])
-            # loss = self.loss_fn(y_pred, y)
+            try:
+                loss = self.loss_fn(y_pred, y[self.seq_len - 1:])
+            except:
+                loss = self.loss_fn(y_pred, y[self.seq_len - 1:])
             loss.backward()
             optimizer.step()
 
@@ -135,11 +138,6 @@ class cGRU:
                     'kappa': [],
                     'predictions': []
                 }
-            
-            # print(pred)
-            # print(acc)
-            # print(kappa)
-            # print(ssssss)
 
             self.performance[f'task_{task_number}']['acc'].append(acc)
             self.performance[f'task_{task_number}']['kappa'].append(kappa)
@@ -170,11 +168,7 @@ class cGRU:
             y = list(y)
             x, y, _ = self._load_batch(x, y)
             y_pred,_ = self.model(x)
-            # print(y_pred)
-            y_pred = y_pred[:, -1, :]
-            # print(y_pred)
             pred, _ = get_pred_from_outputs(y_pred)
-            # print(pred)
             if f'task_{task}' not in self.performance_anytime:
                 self.performance_anytime[f'task_{task}'] = {
                     'acc': [],
@@ -182,7 +176,7 @@ class cGRU:
                     'predictions': []
                 }
             
-            self.performance_anytime[f'task_{task}']['predictions'].append(pred)
+            self.performance_anytime[f'task_{task}']['predictions'].append(pred.item())
 
 
     def save_final_metrics(self, task):
@@ -212,15 +206,10 @@ class cGRU:
             except:
                 self.performance_anytime[f'task_{task}']['acc'].append((copy.deepcopy(acc.update(self.performance_anytime[f'task_{task}']['predictions'][i],int(y[i])))).get())
                 self.performance_anytime[f'task_{task}']['kappa'].append((copy.deepcopy(ck.update(self.performance_anytime[f'task_{task}']['predictions'][i],int(y[i])))).get())
-            # try:
-            #     self.performance_anytime[f'task_{task}']['acc'].append(copy.deepcopy(acc.update(int(self.performance_anytime[f'task_{task}']['predictions'][i]),int(y[i]))))
-            #     self.performance_anytime[f'task_{task}']['kappa'].append(copy.deepcopy(ck.update(int(self.performance_anytime[f'task_{task}']['predictions'][i]),int(y[i]))))
-            # except:
-            #     self.performance_anytime[f'task_{task}']['acc'].append(copy.deepcopy(acc.update(self.performance_anytime[f'task_{task}']['predictions'][i],int(y[i]))))
-            #     self.performance_anytime[f'task_{task}']['kappa'].append(copy.deepcopy(ck.update(self.performance_anytime[f'task_{task}']['predictions'][i],int(y[i]))))
 
         print('All points Accuracy= ', self.performance_anytime[f'task_{task}']['acc'][-1])
         print('All points cohen kappa= ', self.performance_anytime[f'task_{task}']['kappa'][-1])
+        
         
         
     def plot_metrics(self):
