@@ -1,5 +1,4 @@
-# cPB: Continuous Piggyback Architecture for Evolving Streaming Time Series
-This repository contains the code used for the experimentation shown in the paper presented at the 33rd European Symposium on Artificial Neural Networks, Computational Intelligence and Machine Learning Conference.
+# cPB: Continuous Piggyback for Streaming Continual Learning with Temporal Dependence
 
 
 ## 1) Installation
@@ -175,17 +174,6 @@ This folder contains the Jupyter notebooks for running pre-trained models and ex
 
 ##### IMPORTANT: before running each model the config cell should be configured with our desired configs. The parameters of the models the input data and the pre-trained models should be defined.
 
-## Contact:
-reza.paki@mail.polimi.it
-
-## Collaborators:
-[Federico Giannini](https://github.com/federicogiannini13)
-
-[Emanuele Della Valle](https://github.com/emanueledellavalle)
-## Credits:
-[https://github.com/AndreaCossu/ContinualLearning-SequentialProcessing](https://github.com/federicogiannini13/cpnn)
-
-[https://github.com/gziffer/tenet?tab=readme-ov-file](https://github.com/gziffer/tenet?tab=readme-ov-file)
 
 
 
